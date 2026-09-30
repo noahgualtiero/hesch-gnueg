@@ -1193,8 +1193,12 @@ function showRecipe(d) {
     (d.note ? ` · ${d.note}` : "");
   $("rIngredients").innerHTML = (d.ingredients || []).map(i => `<li>${esc(i)}</li>`).join("");
   $("rIngWrap").hidden = !(d.ingredients || []).length;
+  // Ergebnis auf eigener Seite: Eingabe ausblenden
+  $("recipeInput").hidden = true; $("recipeConfig").hidden = true;
   $("recipeResult").hidden = false;
+  $("sheetTitle").textContent = "Rezept prüfen";
   recipeStatus("Prüfe die Werte kurz und passe sie bei Bedarf an.");
+  document.querySelector("#sheet .sheet").scrollTop = 0;
 }
 $("rUrlGo").addEventListener("click", () => {
   const url = $("rUrl").value.trim();
@@ -1509,7 +1513,15 @@ function closeSheet() {
 $("openSheet").addEventListener("click", openSheet);
 $("closeSheet").addEventListener("click", closeSheet);
 $("headBack").addEventListener("click", () => {
-  if (!$("recipeStep").hidden) return showStep("capture");
+  if (!$("recipeStep").hidden) {
+    // Von der Prüfseite zurück zur Rezept-Eingabe
+    if (!$("recipeResult").hidden) {
+      $("recipeResult").hidden = true; $("recipeInput").hidden = false; recipeData = null;
+      recipeStatus(""); $("sheetTitle").textContent = "Rezept";
+      return;
+    }
+    return showStep("capture");
+  }
   ($("createStep").hidden ? $("backBtn") : $("createBack")).click();
 });
 $("backBtn").addEventListener("click", () => { setStatus(""); showStep("capture"); });
