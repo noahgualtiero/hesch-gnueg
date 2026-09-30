@@ -224,8 +224,6 @@
   .stat-label { font-size: 14px; color: var(--muted); }
   .stat-big { font-size: 20px; font-weight: 700; letter-spacing: -.01em; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .stat-big small { font-size: 14px; font-weight: 500; color: var(--muted); letter-spacing: 0; }
-  .stat-big.done { color: var(--good); }
-  .stat-big.over { color: var(--danger); }
   .stat .goal-bar { height: 8px; margin-top: 8px; background: var(--card); }
   .stat-sub { font-size: 12px; color: var(--muted); margin-top: 6px; font-variant-numeric: tabular-nums; }
   .tip { font-size: 14px; line-height: 1.45; color: var(--muted); margin: 12px 2px 0; }
@@ -1966,7 +1964,7 @@ function render() {
     $("goalView").innerHTML = `
       <div class="stats">
         <div class="stat">${kBig}
-          <div class="goal-bar"><div style="width:${kPct}%;background:${kOver ? "var(--danger)" : "var(--text)"}"></div></div>
+          <div class="goal-bar"><div style="width:${kPct}%;background:${kcalLeft <= 0 ? "var(--danger)" : "var(--text)"}"></div></div>
           <div class="stat-sub">${r(total.kcal)} / ${r(t.kcal)} kcal${t.burned ? ` · inkl. ${r(t.sportAdd)} kcal Sport` : ""}</div></div>
         <div class="stat">${pBig}
           <div class="goal-bar"><div style="width:${pPct}%;background:var(--protein)"></div></div>
