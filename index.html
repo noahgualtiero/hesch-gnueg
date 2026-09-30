@@ -152,6 +152,9 @@
   .choice-opt input { display: none; }
   .manual { margin-top: 10px; }
   .recipe-btn { margin-top: 0; }
+  .choice-small { margin-top: 10px; }
+  .choice-small .choice-opt { padding: 12px 8px; font-size: 14px; background: var(--soft); color: var(--text); }
+  #newFoodBtn { display: none !important; } /* ersetzt durch „Manuell erstellen“ */
   .row-end { align-items: flex-end; }
   #recipeSection { margin-top: 6px; }
   .recipe-hint, .recipe-meta { font-size: 14px; color: var(--muted); line-height: 1.45; margin: 4px 0 6px; }
@@ -600,8 +603,16 @@
       <div id="recipeSection">
         <label>Rezept</label>
         <button class="secondary recipe-btn" id="recipeBtn">Rezept per Link oder Screenshot</button>
+        <div class="choice choice-small">
+          <label class="choice-opt">Portion fotografieren
+            <small>Zutaten erkennen lassen</small>
+            <input type="file" id="portionPhoto" accept="image/*">
+          </label>
+          <button class="choice-opt" id="manualCreateBtn">Manuell erstellen
+            <small>Lebensmittel oder Rezept</small></button>
+        </div>
       </div>
-      <button class="linkbtn newfood" id="newFoodBtn">Eigenes Lebensmittel oder Rezept erstellen</button>
+      <button class="linkbtn newfood" id="newFoodBtn" hidden>Eigenes Lebensmittel oder Rezept erstellen</button>
       <div id="status" class="status"></div>
       <div id="reader"></div>
     </div>
@@ -1415,10 +1426,22 @@ function ingPhotoStatus(msg, error) {
   $("ingPhotoStatus").textContent = msg;
   $("ingPhotoStatus").className = "status" + (error ? " error" : "");
 }
-$("ingPhoto").addEventListener("change", async e => {
+$("ingPhoto").addEventListener("change", e => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (file) recognizeIngredients(file);
+});
+// Portion fotografieren: direkt in die manuelle Rezept-Ansicht, dort Zutaten erkennen
+$("portionPhoto").addEventListener("change", e => {
   const file = e.target.files[0];
   e.target.value = "";
   if (!file) return;
+  $("newFoodBtn").click();
+  setCreateMode("recipe");
+  recognizeIngredients(file);
+});
+$("manualCreateBtn").addEventListener("click", () => $("newFoodBtn").click());
+async function recognizeIngredients(file) {
   const cfg = recipeCfg();
   if (!cfg.url || !cfg.token) {
     ingPhotoStatus("Dafür braucht es den Rezept-Worker. Richte ihn unter „Rezept auslesen“ ein.", true);
@@ -1458,7 +1481,7 @@ $("ingPhoto").addEventListener("change", async e => {
   } finally {
     $("ingPhotoSpin").hidden = true;
   }
-});
+}
 const it0 = group => group === "Nährwerttabelle" ? 40 : 8;
 function renderIngList() {
   const raw = $("ingSearch").value.trim(), q = norm(raw);
