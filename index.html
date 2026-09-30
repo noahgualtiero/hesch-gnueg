@@ -223,11 +223,11 @@
   #toast:empty { display: none; }
 
   /* Einträge als iOS-Liste */
-  .entry { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-top: .5px solid var(--line); }
+  .entry { display: flex; align-items: center; gap: 12px; padding: 9px 0; border-top: .5px solid var(--line); }
   .entry:first-child { border-top: 0; padding-top: 0; }
   .e-main { flex: 1; min-width: 0; }
-  .e-name { font-weight: 400; font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .e-meta { font-size: 13px; color: var(--muted); margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .e-name { font-weight: 400; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .e-meta { font-size: 12px; color: var(--muted); margin-top: 2px; font-variant-numeric: tabular-nums; }
   .e-side { text-align: right; flex-shrink: 0; }
   .e-side .dens { font-size: 12px; color: var(--muted); margin-top: 2px; font-weight: 400; }
   .e-side .dens::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%;
@@ -235,7 +235,7 @@
   .e-side .dens.good, .e-side .dens.bad { color: var(--muted); font-weight: 400; }
   .e-side .dens.good::before { background: var(--good); }
   .e-side .dens.bad::before { background: var(--danger); }
-  .e-kcal { font-weight: 400; font-size: 17px; color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .e-kcal { font-weight: 400; font-size: 15px; color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .e-kcal.sport { color: var(--accent); }
   .entry[data-id] { cursor: pointer; }
   .entry[data-id]:active { opacity: .6; }
