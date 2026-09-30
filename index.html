@@ -1434,7 +1434,7 @@ function render() {
           : `<div class="e-main"><div class="e-name">${esc(e.name)}</div>
                <div class="e-meta">${r(e.grams)} g · ${fmtTime(e.time)}</div></div>
              <div class="e-side"><div class="e-kcal">${r(e.kcal)} kcal</div>
-               <div class="dens ${densClass(density(e))}">${fmtDensity(density(e))} g P/100 kcal</div></div>`}
+               <div class="dens ${densClass(density(e))}" title="${fmtDensity(density(e))} g Protein pro 100 kcal">P ${fmtDensity(density(e))}</div></div>`}
         <span class="chev" aria-hidden="true"></span></div>`).join("")
     : '<p class="empty">Noch nichts erfasst.</p>';
   renderHeatmap();
