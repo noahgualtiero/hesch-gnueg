@@ -254,14 +254,16 @@
   .wizlink { display: block; margin: 14px auto 0; }
 
   /* Ziehen zum Aktualisieren */
-  .ptr { position: fixed; left: 0; right: 0; top: 0; z-index: 40; display: flex; flex-direction: column; align-items: center; gap: 4px;
-         padding-top: calc(10px + env(safe-area-inset-top, 0px)); color: var(--muted); font-size: 13px;
-         transform: translateY(-100%); opacity: 0; pointer-events: none; }
-  .ptr-icon { width: 30px; height: 30px; border-radius: 50%; background: var(--card); display: flex; align-items: center; justify-content: center;
-              font-size: 16px; color: var(--accent); box-shadow: 0 1px 4px rgba(0, 0, 0, .12); transition: transform .2s; }
-  .ptr.ready .ptr-icon { transform: rotate(180deg); }
-  .ptr.loading .ptr-icon { animation: ptrSpin .8s linear infinite; }
-  @keyframes ptrSpin { to { transform: rotate(360deg); } }
+  html.standalone, html.standalone body { overscroll-behavior-y: none; }
+  .ptr { position: fixed; left: 50%; top: calc(14px + env(safe-area-inset-top, 0px)); z-index: 40; width: 28px; height: 28px;
+         margin-left: -14px; opacity: 0; pointer-events: none; }
+  .ptr svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  .ptr-track { fill: none; stroke: var(--soft); stroke-width: 3; }
+  .ptr-arc { fill: none; stroke: var(--muted); stroke-width: 3; stroke-linecap: round; stroke-dasharray: 69.1; stroke-dashoffset: 69.1; }
+  .ptr.loading svg { animation: ptrSpin .7s linear infinite; }
+  .ptr.loading .ptr-arc { stroke-dashoffset: 48 !important; stroke: var(--accent); }
+  @keyframes ptrSpin { from { transform: rotate(-90deg); } to { transform: rotate(270deg); } }
+  main.ptr-anim { transition: transform .3s cubic-bezier(.2, .8, .2, 1); }
 
   /* Sheets */
   .sheet-backdrop { position: fixed; inset: 0; z-index: 50; background: var(--backdrop);
@@ -288,7 +290,7 @@
 </style>
 </head>
 <body>
-<div id="ptr" class="ptr" aria-hidden="true"><div class="ptr-icon">↓</div><span id="ptrText">Zum Aktualisieren ziehen</span></div>
+<div id="ptr" class="ptr" aria-hidden="true"><svg viewBox="0 0 32 32"><circle class="ptr-track" cx="16" cy="16" r="11"/><circle id="ptrArc" class="ptr-arc" cx="16" cy="16" r="11"/></svg></div>
 <main>
   <header class="apphead"><h1>Hesch gnueg?</h1></header>
 
@@ -1402,35 +1404,44 @@ if (!targets(profile)) openWizard();
 (function pullToRefresh() {
   const standalone = window.navigator.standalone === true || window.matchMedia("(display-mode: standalone)").matches;
   if (!standalone) return;
-  const el = $("ptr"), text = $("ptrText"), THRESHOLD = 80;
+  document.documentElement.classList.add("standalone"); // natives Nachfedern aus, damit nur unsere Bewegung läuft
+  const el = $("ptr"), arc = $("ptrArc"), main = document.querySelector("main");
+  const THRESHOLD = 70, MAX = 110, CIRC = 69.1;
   let startY = null, dist = 0;
   const blocked = () => document.body.classList.contains("sheet-open") || !$("wizard").hidden;
-  const show = d => {
+  const draw = d => {
     const p = Math.min(1, d / THRESHOLD);
-    el.style.transform = `translateY(${Math.min(d, THRESHOLD * 1.2) - 60}px)`;
-    el.style.opacity = p;
-    el.classList.toggle("ready", d >= THRESHOLD);
-    text.textContent = d >= THRESHOLD ? "Loslassen zum Aktualisieren" : "Zum Aktualisieren ziehen";
+    main.style.transform = `translateY(${d}px)`;
+    el.style.opacity = Math.min(1, d / 30);
+    arc.style.strokeDashoffset = CIRC * (1 - p);
+    arc.style.stroke = p >= 1 ? "var(--accent)" : "";
   };
-  const reset = () => { el.style.transition = "transform .25s, opacity .25s"; el.style.transform = ""; el.style.opacity = "";
-                        el.classList.remove("ready"); setTimeout(() => { el.style.transition = ""; }, 260); };
+  const settle = to => {
+    main.classList.add("ptr-anim");
+    main.style.transform = to ? `translateY(${to}px)` : "";
+    if (!to) { el.style.opacity = ""; arc.style.strokeDashoffset = ""; arc.style.stroke = ""; }
+    setTimeout(() => main.classList.remove("ptr-anim"), 320);
+  };
   window.addEventListener("touchstart", e => {
     startY = (window.scrollY <= 0 && !blocked() && e.touches.length === 1) ? e.touches[0].clientY : null;
     dist = 0;
   }, { passive: true });
   window.addEventListener("touchmove", e => {
     if (startY === null) return;
-    dist = (e.touches[0].clientY - startY) * 0.5; // Widerstand wie bei iOS
-    if (dist > 0) show(dist); else { startY = null; reset(); }
+    const raw = e.touches[0].clientY - startY;
+    if (raw <= 0) { if (dist) settle(0); startY = null; dist = 0; return; }
+    dist = Math.min(MAX, raw * 0.45); // Widerstand wie bei iOS
+    draw(dist);
   }, { passive: true });
   window.addEventListener("touchend", () => {
     if (startY === null) return;
     startY = null;
     if (dist >= THRESHOLD) {
-      el.classList.remove("ready"); el.classList.add("loading");
-      text.textContent = "Wird aktualisiert …";
-      setTimeout(() => location.reload(), 250);
-    } else reset();
+      settle(56);
+      el.classList.add("loading");
+      setTimeout(() => location.reload(), 350);
+    } else settle(0);
+    dist = 0;
   }, { passive: true });
 })();
 
