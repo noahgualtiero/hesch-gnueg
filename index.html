@@ -109,6 +109,14 @@
   .oi-meta { font-size: 13px; color: var(--muted); }
   .online-empty { font-size: 15px; color: var(--muted); padding: 4px 16px 10px; margin: 0; }
   .online-own { display: block; padding: 12px 16px; margin: 0; }
+  .barcode-btn { margin-top: 0; }
+  .choice { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+  .choice-opt { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; text-align: center;
+                margin: 0; padding: 16px 10px; border-radius: 12px; background: var(--accent-soft); color: var(--accent);
+                font-size: 16px; font-weight: 600; cursor: pointer; text-transform: none; letter-spacing: 0; }
+  .choice-opt small { font-size: 12px; font-weight: 400; color: var(--muted); }
+  .choice-opt input { display: none; }
+  .manual { margin-top: 10px; }
   .product-text { flex: 1; min-width: 0; }
   .favbtn { width: 40px; height: 40px; margin: 0; padding: 0; border-radius: 50%; background: var(--soft); color: var(--muted);
             font-size: 22px; line-height: 1; flex-shrink: 0; }
@@ -390,14 +398,17 @@
   <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
     <div class="sheet-head"><h2 id="sheetTitle">Nahrungsmittel erfassen</h2><button class="secondary navbtn" id="closeSheet" aria-label="Schliessen">×</button></div>
   <div id="captureStep">
-      <label class="upload" id="uploadLabel">
-        Barcode fotografieren
-      <small>oder ein Bild aus der Galerie wählen</small>
-        <input type="file" id="file" accept="image/*" capture="environment">
-      </label>
-      <label for="manual">oder Barcode manuell eingeben</label>
-      <div class="row">
-        <input type="text" id="manual" inputmode="numeric" placeholder="z. B. 7610200337344">
+      <button class="secondary barcode-btn" id="barcodeBtn" aria-expanded="false">Produkt mit Barcode</button>
+      <div id="barcodeChoice" class="choice" hidden>
+        <label class="choice-opt" id="uploadLabel">Barcode fotografieren
+          <small>oder ein Bild aus der Galerie wählen</small>
+          <input type="file" id="file" accept="image/*" capture="environment">
+        </label>
+        <button class="choice-opt" id="typeCodeBtn">Code eintippen
+          <small>die Zahl unter dem Barcode</small></button>
+      </div>
+      <div id="manualWrap" class="row manual" hidden>
+        <input type="text" id="manual" inputmode="numeric" placeholder="z. B. 7610200337344" aria-label="Barcode-Nummer">
         <button class="secondary" id="lookupBtn" style="flex:0 0 auto;width:auto;margin-top:0">Suchen</button>
       </div>
       <label for="foodSearch">oder Lebensmittel bzw. Gericht suchen</label>
@@ -642,6 +653,18 @@ $("file").addEventListener("change", async e => {
   e.target.value = "";
 });
 
+$("barcodeBtn").addEventListener("click", () => {
+  const open = $("barcodeChoice").hidden;
+  $("barcodeChoice").hidden = !open;
+  $("barcodeBtn").setAttribute("aria-expanded", open);
+  if (!open) $("manualWrap").hidden = true;
+});
+$("typeCodeBtn").addEventListener("click", () => {
+  $("barcodeChoice").hidden = true;
+  $("manualWrap").hidden = false;
+  $("manual").focus();
+});
+$("manual").addEventListener("keydown", e => { if (e.key === "Enter") $("lookupBtn").click(); });
 $("lookupBtn").addEventListener("click", () => {
   const code = $("manual").value.trim();
   if (code) lookup(code);
@@ -828,6 +851,7 @@ async function searchOFF(q) {
 async function onlineSearch(q) {
   const box = $("onlineResults");
   box.hidden = false;
+  $("newFoodBtn").hidden = true; // "Nicht dabei? … selbst eingeben" steht in den Ergebnissen
   box.innerHTML = `<div class="online-head">Suche online nach „${esc(q)}“ …</div>`;
   const [usda, off] = await Promise.allSettled([searchUSDA(q), searchOFF(q)]);
   const dishes = usda.status === "fulfilled" ? usda.value : [];
@@ -997,6 +1021,8 @@ function showStep(step) {
 function openSheet() {
   current = null;
   $("onlineResults").hidden = true; $("onlineResults").innerHTML = "";
+  $("barcodeChoice").hidden = true; $("manualWrap").hidden = true; $("barcodeBtn").setAttribute("aria-expanded", "false");
+  $("newFoodBtn").hidden = false;
   $("manual").value = "";
   setStatus("");
   showStep("capture");
