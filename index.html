@@ -253,6 +253,16 @@
   .wiz-result .big b { font-size: 17px; font-weight: 600; color: var(--accent); }
   .wizlink { display: block; margin: 14px auto 0; }
 
+  /* Ziehen zum Aktualisieren */
+  .ptr { position: fixed; left: 0; right: 0; top: 0; z-index: 40; display: flex; flex-direction: column; align-items: center; gap: 4px;
+         padding-top: calc(10px + env(safe-area-inset-top, 0px)); color: var(--muted); font-size: 13px;
+         transform: translateY(-100%); opacity: 0; pointer-events: none; }
+  .ptr-icon { width: 30px; height: 30px; border-radius: 50%; background: var(--card); display: flex; align-items: center; justify-content: center;
+              font-size: 16px; color: var(--accent); box-shadow: 0 1px 4px rgba(0, 0, 0, .12); transition: transform .2s; }
+  .ptr.ready .ptr-icon { transform: rotate(180deg); }
+  .ptr.loading .ptr-icon { animation: ptrSpin .8s linear infinite; }
+  @keyframes ptrSpin { to { transform: rotate(360deg); } }
+
   /* Sheets */
   .sheet-backdrop { position: fixed; inset: 0; z-index: 50; background: var(--backdrop);
     display: flex; align-items: flex-end; justify-content: center; }
@@ -278,6 +288,7 @@
 </style>
 </head>
 <body>
+<div id="ptr" class="ptr" aria-hidden="true"><div class="ptr-icon">↓</div><span id="ptrText">Zum Aktualisieren ziehen</span></div>
 <main>
   <header class="apphead"><h1>Hesch gnueg?</h1></header>
 
@@ -1385,6 +1396,43 @@ $("wizBack").addEventListener("click", () => { if (wiz.step > 0) { wiz.step--; r
 $("wizSkip").addEventListener("click", closeWizard);
 $("wizardLink").addEventListener("click", openWizard);
 if (!targets(profile)) openWizard();
+
+
+// Ziehen zum Aktualisieren (nur als Homescreen-App; Safari im Browser kann das selbst)
+(function pullToRefresh() {
+  const standalone = window.navigator.standalone === true || window.matchMedia("(display-mode: standalone)").matches;
+  if (!standalone) return;
+  const el = $("ptr"), text = $("ptrText"), THRESHOLD = 80;
+  let startY = null, dist = 0;
+  const blocked = () => document.body.classList.contains("sheet-open") || !$("wizard").hidden;
+  const show = d => {
+    const p = Math.min(1, d / THRESHOLD);
+    el.style.transform = `translateY(${Math.min(d, THRESHOLD * 1.2) - 60}px)`;
+    el.style.opacity = p;
+    el.classList.toggle("ready", d >= THRESHOLD);
+    text.textContent = d >= THRESHOLD ? "Loslassen zum Aktualisieren" : "Zum Aktualisieren ziehen";
+  };
+  const reset = () => { el.style.transition = "transform .25s, opacity .25s"; el.style.transform = ""; el.style.opacity = "";
+                        el.classList.remove("ready"); setTimeout(() => { el.style.transition = ""; }, 260); };
+  window.addEventListener("touchstart", e => {
+    startY = (window.scrollY <= 0 && !blocked() && e.touches.length === 1) ? e.touches[0].clientY : null;
+    dist = 0;
+  }, { passive: true });
+  window.addEventListener("touchmove", e => {
+    if (startY === null) return;
+    dist = (e.touches[0].clientY - startY) * 0.5; // Widerstand wie bei iOS
+    if (dist > 0) show(dist); else { startY = null; reset(); }
+  }, { passive: true });
+  window.addEventListener("touchend", () => {
+    if (startY === null) return;
+    startY = null;
+    if (dist >= THRESHOLD) {
+      el.classList.remove("ready"); el.classList.add("loading");
+      text.textContent = "Wird aktualisiert …";
+      setTimeout(() => location.reload(), 250);
+    } else reset();
+  }, { passive: true });
+})();
 
 render();
 </script>
