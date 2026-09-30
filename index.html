@@ -226,7 +226,7 @@
   .nutri .nutri-head { padding: 9px 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .02em; }
   .nutri .nutri-head b, .nutri .nutri-head em { font-size: 12px; font-weight: 500; color: var(--muted); }
   .nutri .nutri-dens { grid-template-columns: 1fr auto; }
-  .dens-legend { font-size: 12px; color: var(--muted); margin: 22px 0 10px; line-height: 1.5; }
+  .dens-legend { font-size: 12px; color: var(--muted); margin: 22px 0 4px; line-height: 1.5; }
   .dens-legend span { white-space: nowrap; }
   .dens-legend i { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin: 0 4px 0 2px; vertical-align: 1px; }
   .dens-legend i.good { background: var(--good); }
@@ -235,7 +235,6 @@
   .delete-link { background: none; color: var(--danger); font-weight: 400; margin-top: 14px; }
   .tag { display: inline-block; font-size: 11px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase;
          color: var(--accent); background: var(--accent-soft); border-radius: 5px; padding: 1px 5px; margin-right: 6px; vertical-align: 1px; }
-  #resetBtn { margin-top: 14px; background: none; color: var(--danger); font-weight: 400; font-size: 17px; padding: 8px; }
   button.danger { background: var(--danger); color: #FFFFFF; }
 
   /* Sortier-Umschalter im iOS-Stil */
@@ -433,7 +432,6 @@
     </div>
     <div id="meals"></div>
     <p class="dens-legend" id="densLegend"><span>P = g Protein pro 100 kcal</span> · <span><i class="good"></i>ab 10 sehr gut</span> · <span><i class="bad"></i>unter 4 wenig</span></p>
-    <button class="secondary" id="resetBtn">Tag zurücksetzen</button>
   </section>
 
 
@@ -1180,12 +1178,6 @@ function closeConfirm() {
   confirmAction = null;
   if (confirmReturn && document.contains(confirmReturn)) confirmReturn.focus();
 }
-$("resetBtn").addEventListener("click", () => openConfirm({
-  title: "Alle Einträge löschen?",
-  text: "Alle Nahrungsmittel und Sporteinträge dieses Tages werden gelöscht. Das lässt sich nicht rückgängig machen.",
-  returnFocus: $("resetBtn"),
-  action: () => { entries = []; save(); render(); showToast("Alle Einträge dieses Tages gelöscht"); }
-}));
 $("confirmCancel").addEventListener("click", closeConfirm);
 $("confirmOk").addEventListener("click", () => { const a = confirmAction; closeConfirm(); if (a) a(); });
 $("confirmSheet").addEventListener("click", e => { if (e.target === $("confirmSheet")) closeConfirm(); });
@@ -1381,7 +1373,6 @@ function render() {
     : dt.toLocaleDateString("de-CH", { weekday: "short", day: "numeric", month: "long", year: dt.getFullYear() === new Date().getFullYear() ? undefined : "numeric" });
   $("nextDay").disabled = isToday;
   const editable = isToday || backfill;
-  $("resetBtn").hidden = !editable;
   $("todayBtn").hidden = isToday;
   // Erfassen nur für heute: an vergangenen Tagen die Buttons ausblenden
   document.querySelector(".addrow").hidden = !editable;
