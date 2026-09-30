@@ -217,6 +217,7 @@
   .segmented button[aria-pressed="true"] { background: var(--card); font-weight: 600; box-shadow: 0 1px 3px rgba(0, 0, 0, .12); }
   .dens { white-space: nowrap; }
   .dens.good { color: var(--good); font-weight: 500; }
+  .dens.bad { color: var(--danger); font-weight: 500; }
 
   /* Profil */
   details.card > summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between;
@@ -756,6 +757,9 @@ function showProduct(product, portion) {
   $("pPer100").textContent =
     `pro 100 g: ${r(current.kcal)} kcal · P ${r(current.protein)} g · K ${r(current.carbs)} g · F ${r(current.fat)} g` +
     (current.kcal > 0 ? ` · ${fmtDensity(current.protein / current.kcal * 100)} g Protein/100 kcal` : "");
+  const d = current.kcal > 0 ? current.protein / current.kcal * 100 : null;
+  $("pPer100").innerHTML = esc($("pPer100").textContent).replace(/([\d.]+ g Protein\/100 kcal)$/,
+    m => `<span class="dens ${d == null ? "" : densClass(d)}">${m}</span>`);
   $("portion").value = portion;
   $("count").value = 1;
   showStep("add");
@@ -1260,6 +1264,8 @@ function progress(label, value, target, unit, color, mustReach, extra = "") {
 
 // Protein-Dichte: Gramm Protein pro 100 kcal
 const density = e => e.kcal > 0 ? e.protein / e.kcal * 100 : 0;
+// Bewertung: ab 10 g sehr gut (grün), unter 3 g wenig (rot), dazwischen neutral
+const densClass = v => v >= 10 ? "good" : v < 3 ? "bad" : "";
 const fmtDensity = v => v.toLocaleString("de-CH", { maximumFractionDigits: 1 });
 let sortMode = "time";
 try { sortMode = localStorage.getItem("naehrwert-sortierung") || "time"; } catch {}
@@ -1359,7 +1365,7 @@ function render() {
              <div class="e-kcal sport">+${r(e.kcal)} kcal</div>`
           : `<div class="e-main"><div class="e-name">${esc(e.name)}</div>
                <div class="e-meta">${fmtTime(e.time)} · ${r(e.grams)} g ·
-                 <span class="dens${density(e) >= 10 ? " good" : ""}">${fmtDensity(density(e))} g P/100 kcal</span></div></div>
+                 <span class="dens ${densClass(density(e))}">${fmtDensity(density(e))} g P/100 kcal</span></div></div>
              <div class="e-kcal">${r(e.kcal)} kcal</div>`}
         ${editable ? `<button onclick="removeEntry(${e.id})" aria-label="Entfernen">×</button>` : ""}</div>`).join("")
     : '<p class="empty">Noch nichts erfasst.</p>';
