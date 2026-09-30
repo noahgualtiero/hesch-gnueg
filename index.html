@@ -200,28 +200,32 @@
   .entry { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-top: .5px solid var(--line); }
   .entry:first-child { border-top: 0; padding-top: 0; }
   .e-main { flex: 1; min-width: 0; }
-  .e-name { font-weight: 400; font-size: 17px; overflow-wrap: anywhere; }
+  .e-name { font-weight: 400; font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .e-meta { font-size: 13px; color: var(--muted); margin-top: 2px; font-variant-numeric: tabular-nums; }
-  .e-kcal { font-weight: 400; font-size: 17px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .e-side { text-align: right; flex-shrink: 0; }
+  .e-side .dens { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .e-side .dens.good { color: var(--good); }
+  .e-side .dens.bad { color: var(--danger); }
+  .e-kcal { font-weight: 400; font-size: 17px; color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .e-kcal.sport { color: var(--accent); }
   .entry[data-id] { cursor: pointer; }
   .entry[data-id]:active { opacity: .6; }
   .chev { width: 8px; height: 8px; border-right: 2px solid var(--faint); border-bottom: 2px solid var(--faint); transform: rotate(-45deg); flex-shrink: 0; margin: 0 4px 0 2px; }
   .entry-sub { color: var(--muted); font-size: 15px; margin: -4px 0 14px; }
-  .kcal-big { font-size: 17px; color: var(--muted); margin: 4px 0 16px; }
+  .kcal-big { font-size: 17px; color: var(--muted); margin: 0 0 14px; }
   .kcal-big b { font-size: 34px; font-weight: 700; color: var(--text); letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
   .kcal-big small { display: block; font-size: 13px; margin-top: 2px; }
-  .mtiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-  .mtile { background: var(--soft); border-radius: 12px; padding: 10px 12px; min-width: 0; }
-  .mtile span { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
-  .mtile i { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-  .mtile b { display: block; font-size: 20px; font-weight: 600; margin-top: 4px; font-variant-numeric: tabular-nums; }
-  .mtile small { display: block; font-size: 12px; color: var(--muted); margin-top: 1px; white-space: nowrap; }
-  .dens-line { display: flex; justify-content: space-between; gap: 10px; font-size: 15px; color: var(--muted); margin: 14px 2px 0; }
-  .dens-line b { font-weight: 600; }
+  .nutri { background: var(--soft); border-radius: 12px; padding: 0 14px; }
+  .nutri > div { display: grid; grid-template-columns: 1fr auto 76px; gap: 10px; align-items: baseline; padding: 11px 0; border-top: .5px solid var(--line); font-size: 16px; }
+  .nutri > div:first-child { border-top: 0; }
+  .nutri b { font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+  .nutri em { font-style: normal; color: var(--muted); text-align: right; font-size: 14px; font-variant-numeric: tabular-nums; }
+  .nutri .nutri-head { padding: 9px 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .02em; }
+  .nutri .nutri-head b, .nutri .nutri-head em { font-size: 12px; font-weight: 500; color: var(--muted); }
+  .nutri .nutri-dens { grid-template-columns: 1fr auto; }
   .delete-link { background: none; color: var(--danger); font-weight: 400; margin-top: 14px; }
   .tag { display: inline-block; font-size: 11px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase;
-         color: var(--accent); background: var(--accent-soft); border-radius: 5px; padding: 2px 6px; margin-right: 6px; vertical-align: 2px; }
+         color: var(--accent); background: var(--accent-soft); border-radius: 5px; padding: 1px 5px; margin-right: 6px; vertical-align: 1px; }
   #resetBtn { margin-top: 14px; background: none; color: var(--danger); font-weight: 400; font-size: 17px; padding: 8px; }
   button.danger { background: var(--danger); color: #FFFFFF; }
 
@@ -1209,12 +1213,13 @@ function openEntry(id) {
   } else {
     const per = v => e.grams > 0 ? v / e.grams * 100 : 0;
     const d = density(e);
-    const tile = (label, v, color) => `<div class="mtile"><span><i style="background:${color}"></i>${label}</span>
-      <b>${fmtDensity(v)} g</b><small>${fmtDensity(per(v))} g / 100 g</small></div>`;
+    const row = (label, v, unit, round) => `<div><span>${label}</span><b>${round ? r(v) : fmtDensity(v)} ${unit}</b><em>${round ? r(per(v)) : fmtDensity(per(v))} ${unit}</em></div>`;
     $("entryBody").innerHTML = `<p class="entry-sub">${when} · ${r(e.grams)} g</p>
-      <div class="kcal-big"><b>${r(e.kcal)}</b> kcal<small>${r(per(e.kcal))} kcal pro 100 g</small></div>
-      <div class="mtiles">${tile("Protein", e.protein, COLORS.protein)}${tile("KH", e.carbs, COLORS.carbs)}${tile("Fett", e.fat, COLORS.fat)}</div>
-      <p class="dens-line">Protein-Dichte <b class="dens ${densClass(d)}">${fmtDensity(d)} g pro 100 kcal</b></p>`;
+      <div class="kcal-big"><b>${r(e.kcal)}</b> kcal</div>
+      <div class="nutri"><div class="nutri-head"><span></span><b>Gegessen</b><em>pro 100 g</em></div>
+        ${row("Kalorien", e.kcal, "kcal", true)}${row("Protein", e.protein, "g")}${row("Kohlenhydrate", e.carbs, "g")}${row("Fett", e.fat, "g")}
+        <div class="nutri-dens"><span>Protein-Dichte</span><b class="dens ${densClass(d)}">${fmtDensity(d)} g pro 100 kcal</b></div>
+      </div>`;
   }
   $("entryDelete").hidden = !(day === todayStr() || backfill);
   $("entrySheet").hidden = false;
@@ -1420,13 +1425,13 @@ function render() {
   $("sortBar").hidden = entries.filter(food).length < 2;
   $("meals").innerHTML = list.length
     ? list.map(e => `<div class="entry" role="button" tabindex="0" data-id="${e.id}">${e.kind === "sport"
-          ? `<div class="e-main"><div class="e-name"><span class="tag">Sport</span>${esc(e.name)}</div>
-               <div class="e-meta">${fmtTime(e.time)} · ${r(e.minutes)} min</div></div>
-             <div class="e-kcal sport">+${r(e.kcal)} kcal</div>`
+          ? `<div class="e-main"><div class="e-name">${esc(e.name)}</div>
+               <div class="e-meta"><span class="tag">Sport</span>${r(e.minutes)} min · ${fmtTime(e.time)}</div></div>
+             <div class="e-side"><div class="e-kcal sport">+${r(e.kcal)} kcal</div></div>`
           : `<div class="e-main"><div class="e-name">${esc(e.name)}</div>
-               <div class="e-meta">${fmtTime(e.time)} · ${r(e.grams)} g ·
-                 <span class="dens ${densClass(density(e))}">${fmtDensity(density(e))} g P/100 kcal</span></div></div>
-             <div class="e-kcal">${r(e.kcal)} kcal</div>`}
+               <div class="e-meta">${r(e.grams)} g · ${fmtTime(e.time)}</div></div>
+             <div class="e-side"><div class="e-kcal">${r(e.kcal)} kcal</div>
+               <div class="dens ${densClass(density(e))}">${fmtDensity(density(e))} g P/100 kcal</div></div>`}
         <span class="chev" aria-hidden="true"></span></div>`).join("")
     : '<p class="empty">Noch nichts erfasst.</p>';
   renderHeatmap();
