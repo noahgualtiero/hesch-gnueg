@@ -197,11 +197,29 @@
   .over-text { color: var(--danger); }
   .credits { font-size: 12px; line-height: 1.5; color: var(--muted); text-align: center; margin: 4px 16px 24px; }
   .credits a { color: inherit; }
+  .stats { background: var(--soft); border-radius: 12px; padding: 4px 14px; margin-top: 16px; }
+  .stat { padding: 12px 0; }
+  .stat + .stat { border-top: .5px solid var(--line); }
+  .stat-top { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+  .stat-label { font-size: 15px; color: var(--muted); }
+  .stat-big { font-size: 22px; font-weight: 700; letter-spacing: -.01em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .stat-big small { font-size: 15px; font-weight: 500; color: var(--muted); letter-spacing: 0; }
+  .stat-big.done { color: var(--good); }
+  .stat-big.over { color: var(--danger); }
+  .stat .goal-bar { height: 8px; margin-top: 8px; background: var(--card); }
+  .stat-sub { font-size: 12px; color: var(--muted); margin-top: 6px; font-variant-numeric: tabular-nums; }
+  .tip { font-size: 13px; line-height: 1.45; color: var(--muted); margin: 12px 2px 0; }
+  .tip strong { color: var(--text); font-weight: 600; }
+  .macros { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
+  .macros div { min-width: 0; }
+  .macros span { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .macros b { display: block; font-size: 15px; font-weight: 600; margin-top: 1px; font-variant-numeric: tabular-nums; }
+  .macros .dot { width: 8px; height: 8px; }
   .hint { font-size: 15px; line-height: 1.45; color: var(--text); background: var(--soft); border-radius: 10px; padding: 12px 14px; margin: 18px 0 0; }
   .sportline { font-size: 13px; color: var(--muted); margin-top: 6px; }
 
   /* Makros */
-  .summary { margin-top: 18px; padding-top: 16px; border-top: .5px solid var(--line); }
+  .summary { margin-top: 18px; }
   .summary-head { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; color: var(--muted);
                   margin-bottom: 10px; text-transform: uppercase; letter-spacing: .02em; }
   .summary-head b { color: var(--text); font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; text-transform: none; }
@@ -214,7 +232,7 @@
   #goalView > .empty { margin-top: 16px; }
 
   /* Erfassen */
-  .addrow { display: flex; gap: 10px; margin: 18px 0 4px; }
+  .addrow { display: flex; gap: 10px; margin: 20px 0 0; }
   .addrow .addbtn { margin: 0; }
   .addbtn { font-size: 16px; font-weight: 600; padding: 14px 10px; border-radius: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .addbtn.sport { flex: 0 0 34%; background: var(--accent-soft); color: var(--accent); }
@@ -284,10 +302,12 @@
   details.card[open] > summary { margin-bottom: 4px; font-weight: 600; }
 
   /* Übersicht */
-  .grid-wrap { overflow-x: auto; padding-bottom: 4px; }
-  .heat { display: grid; grid-auto-flow: column; grid-template-rows: 14px repeat(7, 16px); gap: 3px; width: max-content; }
+  .grid-wrap { padding-bottom: 4px; }
+  .heat { display: grid; grid-auto-flow: column; grid-template-rows: 14px repeat(7, auto); grid-template-columns: auto; grid-auto-columns: minmax(0, 1fr); gap: 3px; width: 100%; }
+  .heat .cell { width: 100%; height: auto; aspect-ratio: 1; }
+  .heat .cell.p-ok::after { inset: 26%; }
   .heat .mlabel, .heat .wlabel { font-size: 11px; color: var(--muted); line-height: 14px; white-space: nowrap; }
-  .heat .wlabel { line-height: 16px; padding-right: 6px; }
+  .heat .wlabel { align-self: center; line-height: 1; padding-right: 6px; }
   .cell { display: inline-block; width: 16px; height: 16px; border-radius: 4px; background: var(--soft);
           border: 0; position: relative; padding: 0; margin: 0; cursor: pointer; vertical-align: middle; }
   .cell.future { visibility: hidden; }
@@ -441,14 +461,14 @@
       <div class="daylabel"><h2 id="dayLabel">Heute</h2><button class="linkbtn" id="todayBtn" hidden>Zurück zu heute</button></div>
       <button class="secondary navbtn" id="nextDay" aria-label="Nächster Tag">›</button>
     </div>
+    <div id="goalView"></div>
+    <div id="summary"></div>
     <div class="addrow">
       <button id="openSheet" class="addbtn">+ Nahrungsmittel</button>
       <button id="openSport" class="addbtn sport">+ Sport</button>
     </div>
     <button class="linkbtn backfill" id="backfillBtn" hidden>Nachtragen</button>
     <div id="toast" class="status" role="status"></div>
-    <div id="goalView"></div>
-    <div id="summary"></div>
   </section>
 
   <section class="card">
@@ -1713,7 +1733,7 @@ function render() {
   // Erfassen nur für heute: an vergangenen Tagen die Buttons ausblenden
   document.querySelector(".addrow").hidden = !editable;
   $("backfillBtn").hidden = editable;
-  $("mealsTitle").textContent = isToday ? "Heute erfasst" : "Erfasst am " + dt.toLocaleDateString("de-CH", { day: "numeric", month: "long" });
+  $("mealsTitle").textContent = "Erfasste Lebensmittel";
 
   // Profil-Info
   $("profileInfo").textContent = tp
@@ -1728,21 +1748,27 @@ function render() {
     const kcalLeft = t.kcal - total.kcal;
     const protLeft = Math.max(0, t.protein - total.protein);
     const freeKcal = kcalLeft - protLeft * 4;
-    let rest;
-    if (kcalLeft <= 0) {
-      rest = `<p class="hint">Kalorienziel für ${isToday ? "heute" : "diesen Tag"} erreicht.${protLeft > 0 ? ` Für das Protein-Ziel fehlen noch ${r(protLeft)} g, am besten sehr magere Quellen wie Magerquark oder Pouletbrust.` : ""}</p>`;
-    } else if (freeKcal <= 0) {
-      rest = `<p class="hint">Die restlichen <strong>${r(kcalLeft)} kcal</strong> reichen knapp für das fehlende Protein (${r(protLeft)} g). Also möglichst reine Proteinquellen wählen.</p>`;
-    } else {
-      rest = `<p class="hint">Noch frei: <strong>${r(kcalLeft)} kcal</strong>.${protLeft > 0 ? ` Davon gehen ${r(protLeft * 4)} kcal an die fehlenden <strong>${r(protLeft)} g Protein</strong>.` : ""}
-        Den Rest von ${r(freeKcal)} kcal kannst du frei verteilen, zum Beispiel als
-        <strong>${r(freeKcal / 4)} g Kohlenhydrate</strong> oder <strong>${r(freeKcal / 9)} g Fett</strong> oder eine Mischung davon.</p>`;
-    }
-    $("goalView").innerHTML =
-      progress("Kalorien", total.kcal, t.kcal, "kcal", "var(--text)", false,
-        t.burned ? ` · inkl. ${r(t.sportAdd)} kcal Sport` : "") +
-      progress("Protein", total.protein, t.protein, "g", "var(--protein)", true) +
-      rest;
+    const kPct = Math.min(100, total.kcal / t.kcal * 100), pPct = Math.min(100, total.protein / t.protein * 100);
+    const kOver = kcalLeft < 0;
+    const kBig = `<div class="stat-top"><span class="stat-label">Kalorien</span>` + (kOver
+      ? `<span class="stat-big over">${r(-kcalLeft)} <small>kcal zu viel</small></span></div>`
+      : `<span class="stat-big">${r(kcalLeft)} <small>kcal übrig</small></span></div>`);
+    const pBig = `<div class="stat-top"><span class="stat-label">Protein</span>` + (protLeft <= 0
+      ? `<span class="stat-big done">Ziel erreicht ✓</span></div>`
+      : `<span class="stat-big">${r(protLeft)} <small>g fehlen</small></span></div>`);
+    let tip = "";
+    if (protLeft > 0 && kcalLeft <= 0) tip = `Für das Protein am besten sehr magere Quellen wie Magerquark oder Pouletbrust.`;
+    else if (protLeft > 0 && freeKcal <= 0) tip = `Die restlichen kcal reichen knapp fürs Protein. Möglichst reine Proteinquellen wählen.`;
+    else if (kcalLeft > 0 && protLeft > 0) tip = `Nach dem Protein bleiben <strong>${r(freeKcal)} kcal</strong> frei, z. B. ${r(freeKcal / 4)} g Kohlenhydrate oder ${r(freeKcal / 9)} g Fett.`;
+    $("goalView").innerHTML = `
+      <div class="stats">
+        <div class="stat">${kBig}
+          <div class="goal-bar"><div style="width:${kPct}%;background:${kOver ? "var(--danger)" : "var(--text)"}"></div></div>
+          <div class="stat-sub">${r(total.kcal)} / ${r(t.kcal)} kcal${t.burned ? ` · inkl. ${r(t.sportAdd)} kcal Sport` : ""}</div></div>
+        <div class="stat">${pBig}
+          <div class="goal-bar"><div style="width:${pPct}%;background:var(--protein)"></div></div>
+          <div class="stat-sub">${r(total.protein)} / ${r(t.protein)} g</div></div>
+      </div>${tip ? `<p class="tip">${tip}</p>` : ""}`;
   } else {
     $("goalView").innerHTML = '<p class="empty">Fülle oben „Mein Profil“ aus, dann siehst du hier dein Tagesziel und wie viel du noch essen kannst.</p>';
   }
@@ -1757,10 +1783,10 @@ function render() {
           <span style="width:${s.carbs}%;background:${COLORS.carbs}"></span>
           <span style="width:${s.fat}%;background:${COLORS.fat}"></span>
         </div>
-        <div class="legend">
-          <div><span class="dot" style="background:${COLORS.protein}"></span>Protein ${r(total.protein)} g</div>
-          <div><span class="dot" style="background:${COLORS.carbs}"></span>Kohlenhydrate ${r(total.carbs)} g</div>
-          <div><span class="dot" style="background:${COLORS.fat}"></span>Fett ${r(total.fat)} g</div>
+        <div class="macros">
+          <div><span><i class="dot" style="background:${COLORS.protein}"></i>Protein</span><b>${r(total.protein)} g</b></div>
+          <div><span><i class="dot" style="background:${COLORS.carbs}"></i>Kohlenhydrate</span><b>${r(total.carbs)} g</b></div>
+          <div><span><i class="dot" style="background:${COLORS.fat}"></i>Fett</span><b>${r(total.fat)} g</b></div>
         </div>
       </div>`;
   }
