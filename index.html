@@ -90,6 +90,16 @@
 
   /* Suche */
   .combo { position: relative; }
+  .search-row { display: flex; align-items: center; gap: 12px; }
+  .search-row input { flex: 1; min-width: 0; }
+  #searchCancel { display: none; margin: 0; font-size: 17px; flex-shrink: 0; }
+  /* Suchmodus: Popup oben, Barcode-Bereich aus, Liste bis zur Tastatur */
+  .sheet-backdrop.searching { align-items: flex-start; }
+  .sheet-backdrop.searching .sheet { border-radius: 0 0 14px 14px; max-height: 100%; animation: none;
+    padding-top: calc(12px + env(safe-area-inset-top, 0px)); }
+  .sheet-backdrop.searching .sheet::before, .sheet-backdrop.searching .sheet-head,
+  .sheet-backdrop.searching #barcodeSection, .sheet-backdrop.searching #newFoodBtn { display: none; }
+  .sheet-backdrop.searching #searchCancel { display: block; }
   .combo-list { margin-top: 8px; max-height: 280px; overflow-y: auto; border-radius: 12px; background: var(--card);
                 box-shadow: 0 0 0 .5px var(--line), 0 8px 24px rgba(0, 0, 0, .12); overscroll-behavior: contain; }
   .combo-group { position: sticky; top: 0; background: var(--bg); font-size: 13px; color: var(--muted); padding: 6px 16px;
@@ -414,6 +424,7 @@
   <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
     <div class="sheet-head"><h2 id="sheetTitle">Nahrungsmittel erfassen</h2><button class="secondary navbtn" id="closeSheet" aria-label="Schliessen">×</button></div>
   <div id="captureStep">
+      <div id="barcodeSection">
       <label class="first-label">Mit Barcode</label>
       <div id="barcodeChoice" class="choice">
         <label class="choice-opt" id="uploadLabel">Foto oder Bild
@@ -428,9 +439,13 @@
         <button class="secondary" id="lookupBtn" style="flex:0 0 auto;width:auto;margin-top:0">Suchen</button>
       </div>
       <label for="foodSearch">Ohne Barcode</label>
+      </div>
       <div class="combo">
-        <input type="text" id="foodSearch" placeholder="z. B. Banane, Reis, Burrito …" autocomplete="off"
+        <div class="search-row">
+        <input type="text" id="foodSearch" enterkeyhint="search" placeholder="z. B. Banane, Reis, Proteinriegel …" autocomplete="off"
                role="combobox" aria-expanded="false" aria-controls="foodList" aria-autocomplete="list">
+        <button class="linkbtn" id="searchCancel">Abbrechen</button>
+        </div>
         <div id="foodList" class="combo-list" role="listbox" hidden></div>
       </div>
       <button class="linkbtn newfood" id="newFoodBtn">+ Eigenes Lebensmittel erstellen</button>
@@ -780,10 +795,9 @@ function renderFoodList() {
           comboItems.push({ label: p.name, pick: () => { showProduct(p, p.portion); setStatus(note); } });
         }
       };
-      addGroup("Online · Gerichte (USDA, englisch)", o.dishes, "Richtwerte aus USDA FoodData Central.");
-      addGroup("Online · Produkte (Open Food Facts)", o.products, "Werte aus Open Food Facts.");
-      if (!o.dishes.length && !o.products.length && !comboItems.length)
-        html += '<div class="combo-empty">Nichts gefunden. Gerichte findest du oft mit dem englischen Namen, z. B. „chicken curry“.</div>';
+      addGroup("Online · Open Food Facts", o.products, "Werte aus Open Food Facts.");
+      if (!o.products.length && !comboItems.length)
+        html += '<div class="combo-empty">Online nichts gefunden.</div>';
     }
   }
   if (raw.length >= 2) {
@@ -794,6 +808,7 @@ function renderFoodList() {
   $("foodList").innerHTML = html || '<div class="combo-empty">Tippe, um zu suchen.</div>';
   comboActive = q && comboItems.length ? 0 : -1;
   markActive();
+  fitFoodList();
 }
 function markActive() {
   $("foodList").querySelectorAll(".combo-item").forEach(el => el.classList.toggle("active", +el.dataset.i === comboActive));
@@ -802,8 +817,28 @@ function markActive() {
   else $("foodSearch").removeAttribute("aria-activedescendant");
 }
 let comboBlurTimer = null;
-function openFoodList() { clearTimeout(comboBlurTimer); renderFoodList(); $("foodList").hidden = false; $("foodSearch").setAttribute("aria-expanded", "true"); }
-function closeFoodList() { $("foodList").hidden = true; $("foodSearch").setAttribute("aria-expanded", "false"); }
+function openFoodList() {
+  clearTimeout(comboBlurTimer);
+  $("sheet").classList.add("searching");
+  renderFoodList();
+  $("foodList").hidden = false;
+  $("foodSearch").setAttribute("aria-expanded", "true");
+  fitFoodList();
+  setTimeout(fitFoodList, 350); // nach dem Einblenden der Tastatur nochmals messen
+}
+function closeFoodList() { $("foodList").hidden = true; $("foodSearch").setAttribute("aria-expanded", "false"); $("sheet").classList.remove("searching"); }
+// Liste so hoch machen, dass sie genau bis zur Tastatur reicht
+function fitFoodList() {
+  const list = $("foodList");
+  if (list.hidden) return;
+  const vv = window.visualViewport;
+  const bottom = vv ? vv.height + vv.offsetTop : window.innerHeight;
+  list.style.maxHeight = Math.max(160, bottom - list.getBoundingClientRect().top - 12) + "px";
+}
+if (window.visualViewport) {
+  window.visualViewport.addEventListener("resize", fitFoodList);
+  window.visualViewport.addEventListener("scroll", fitFoodList);
+}
 function pickFood(i) {
   const it = comboItems[i];
   if (!it) return;
@@ -829,37 +864,14 @@ $("foodSearch").addEventListener("keydown", e => {
   else if (e.key === "Escape" && !$("foodList").hidden) { closeFoodList(); e.stopPropagation(); }
 });
 $("foodList").addEventListener("mousedown", e => e.preventDefault());
+$("searchCancel").addEventListener("mousedown", e => e.preventDefault());
+$("searchCancel").addEventListener("click", () => { $("foodSearch").value = ""; closeFoodList(); $("foodSearch").blur(); });
 $("foodList").addEventListener("click", e => {
   const el = e.target.closest(".combo-item");
   if (el) pickFood(+el.dataset.i);
 });
 
-// Online-Suche: Gerichte (USDA FoodData Central) und Produkte (Open Food Facts)
-const USDA_KEY = "DEMO_KEY"; // öffentlicher Demo-Schlüssel, reicht für den persönlichen Gebrauch
-
-async function searchUSDA(q) {
-  const url = "https://api.nal.usda.gov/fdc/v1/foods/search?api_key=" + USDA_KEY +
-    "&pageSize=12&dataType=" + encodeURIComponent("Survey (FNDDS),SR Legacy") + "&query=" + encodeURIComponent(q);
-  const res = await fetch(url);
-  if (!res.ok) throw new Error("usda " + res.status);
-  const data = await res.json();
-  const pick = (f, ids) => {
-    const n = (f.foodNutrients || []).find(n => ids.includes(n.nutrientId) || ids.includes(Number(n.nutrientNumber)));
-    return n ? num(n.value) : 0;
-  };
-  return (data.foods || []).map(f => ({
-    source: "usda",
-    key: "usda:" + f.fdcId,
-    name: f.description ? f.description.charAt(0) + f.description.slice(1).toLowerCase() : "Unbenannt",
-    img: "",
-    kcal: pick(f, [1008, 208]),
-    protein: pick(f, [1003, 203]),
-    carbs: pick(f, [1005, 205]),
-    fat: pick(f, [1004, 204]),
-    portion: f.dataType === "Survey (FNDDS)" ? 250 : 100  // Gerichte: typische Portion, Zutaten: 100 g
-  })).filter(p => p.kcal > 0);
-}
-
+// Online-Suche in Open Food Facts
 async function searchOFF(q) {
   const url = "https://world.openfoodfacts.org/cgi/search.pl?action=process&json=1&search_simple=1&sort_by=unique_scans_n" +
     "&page_size=15&fields=code,product_name,brands,image_front_small_url,nutriments,serving_quantity&search_terms=" + encodeURIComponent(q);
@@ -887,13 +899,10 @@ async function fetchOnline(q) {
   const key = norm(q);
   if (onlineCache.has(key)) return;
   onlineCache.set(key, { status: "loading" });
-  const [usda, off] = await Promise.allSettled([searchUSDA(q), searchOFF(q)]);
-  if (usda.status === "rejected" && off.status === "rejected") onlineCache.delete(key), onlineCache.set(key, { status: "error" });
-  else onlineCache.set(key, { status: "done",
-    dishes: usda.status === "fulfilled" ? usda.value : [], products: off.status === "fulfilled" ? off.value : [] });
+  try { onlineCache.set(key, { status: "done", products: await searchOFF(q) }); }
+  catch { onlineCache.set(key, { status: "error" }); setTimeout(() => { if (onlineCache.get(key)?.status === "error") onlineCache.delete(key); }, 15000); }
   // nur neu zeichnen, wenn der Begriff noch im Suchfeld steht
   if (!$("foodList").hidden && norm($("foodSearch").value.trim()) === key) renderFoodList();
-  if (onlineCache.get(key).status === "error") setTimeout(() => { if (onlineCache.get(key)?.status === "error") onlineCache.delete(key); }, 15000);
 }
 
 // Favoriten: Stern beim Produkt, erscheinen zuoberst im Auswahlfeld
