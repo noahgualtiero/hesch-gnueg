@@ -226,6 +226,12 @@
   .nutri .nutri-head { padding: 9px 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .02em; }
   .nutri .nutri-head b, .nutri .nutri-head em { font-size: 12px; font-weight: 500; color: var(--muted); }
   .nutri .nutri-dens { grid-template-columns: 1fr auto; }
+  .dens-legend { font-size: 12px; color: var(--muted); margin: 12px 0 0; line-height: 1.5; }
+  .dens-legend span { white-space: nowrap; }
+  .dens-legend i { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin: 0 4px 0 2px; vertical-align: 1px; }
+  .dens-legend i.good { background: var(--good); }
+  .dens-legend i.bad { background: var(--danger); }
+  #entryBody .legend { margin: 8px 0 16px; }
   .delete-link { background: none; color: var(--danger); font-weight: 400; margin-top: 14px; }
   .tag { display: inline-block; font-size: 11px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase;
          color: var(--accent); background: var(--accent-soft); border-radius: 5px; padding: 1px 5px; margin-right: 6px; vertical-align: 1px; }
@@ -426,6 +432,7 @@
       <button data-sort="time">Zeit</button><button data-sort="density">Protein/kcal</button><button data-sort="kcal">kcal</button>
     </div>
     <div id="meals"></div>
+    <p class="dens-legend" id="densLegend"><span>P = g Protein pro 100 kcal</span> · <span><i class="good"></i>ab 10 sehr gut</span> · <span><i class="bad"></i>unter 4 wenig</span></p>
     <button class="secondary" id="resetBtn">Tag zurücksetzen</button>
   </section>
 
@@ -1202,6 +1209,20 @@ $("nextDay").addEventListener("click", () => shiftDay(1));
 $("todayBtn").addEventListener("click", () => setDay(todayStr()));
 $("backfillBtn").addEventListener("click", () => { backfill = true; render(); });
 
+// Makro-Linie (Anteil an den Kalorien) mit Legende, für Tag und einzelne Produkte
+function macroLine(v) {
+  const s = split(v);
+  if (!s) return "";
+  return `<div class="macro-line" aria-hidden="true">
+      <span style="width:${s.protein}%;background:${COLORS.protein}"></span>
+      <span style="width:${s.carbs}%;background:${COLORS.carbs}"></span>
+      <span style="width:${s.fat}%;background:${COLORS.fat}"></span></div>
+    <div class="legend">
+      <div><span class="dot" style="background:${COLORS.protein}"></span>Protein ${r(s.protein)} %</div>
+      <div><span class="dot" style="background:${COLORS.carbs}"></span>Kohlenhydrate ${r(s.carbs)} %</div>
+      <div><span class="dot" style="background:${COLORS.fat}"></span>Fett ${r(s.fat)} %</div></div>`;
+}
+
 // Detailansicht eines Eintrags
 let entryOpenId = null;
 function openEntry(id) {
@@ -1219,6 +1240,7 @@ function openEntry(id) {
     const row = (label, v, unit, round) => `<div><span>${label}</span><b>${round ? r(v) : fmtDensity(v)} ${unit}</b><em>${round ? r(per(v)) : fmtDensity(per(v))} ${unit}</em></div>`;
     $("entryBody").innerHTML = `<p class="entry-sub">${when} · ${r(e.grams)} g</p>
       <div class="kcal-big"><b>${r(e.kcal)}</b> kcal</div>
+      ${macroLine(e)}
       <div class="nutri"><div class="nutri-head"><span></span><b>Gegessen</b><em>pro 100 g</em></div>
         ${row("Kalorien", e.kcal, "kcal", true)}${row("Protein", e.protein, "g")}${row("Kohlenhydrate", e.carbs, "g")}${row("Fett", e.fat, "g")}
         <div class="nutri-dens"><span>Protein-Dichte</span><b class="dens ${densClass(d)}">${fmtDensity(d)} g pro 100 kcal</b></div>
@@ -1410,7 +1432,7 @@ function render() {
         </div>
         <div class="legend">
           <div><span class="dot" style="background:${COLORS.protein}"></span>Protein ${r(total.protein)} g</div>
-          <div><span class="dot" style="background:${COLORS.carbs}"></span>KH ${r(total.carbs)} g</div>
+          <div><span class="dot" style="background:${COLORS.carbs}"></span>Kohlenhydrate ${r(total.carbs)} g</div>
           <div><span class="dot" style="background:${COLORS.fat}"></span>Fett ${r(total.fat)} g</div>
         </div>
       </div>`;
@@ -1426,6 +1448,7 @@ function render() {
   });
   document.querySelectorAll("#sortBar button").forEach(b => b.setAttribute("aria-pressed", b.dataset.sort === sortMode));
   $("sortBar").hidden = entries.filter(food).length < 2;
+  $("densLegend").hidden = !entries.some(food);
   $("meals").innerHTML = list.length
     ? list.map(e => `<div class="entry" role="button" tabindex="0" data-id="${e.id}">${e.kind === "sport"
           ? `<div class="e-main"><div class="e-name">${esc(e.name)}</div>
