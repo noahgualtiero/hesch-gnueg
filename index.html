@@ -22,7 +22,7 @@
     --accent: #2A55FF; --accent-soft: rgba(42, 85, 255, .12); --lime: #CCFF00; --danger: #FF3B30;
     --good: #248A3D; --good-soft: rgba(52, 199, 89, .15);
     --protein: #2A55FF; --carbs: #B8E600; --fat: #1C1C1E;
-    --cell-under: #BFCDFF; --cell-over: #FFB3AE; --sheet: #FFFFFF; --backdrop: rgba(0, 0, 0, .35);
+    --cell-under: #BFCDFF; --cell-over: #FFB3AE; --sheet: #FFFFFF; --backdrop: rgba(0, 0, 0, .5);
     --radius: 12px;
     color-scheme: light;
   }
@@ -33,7 +33,7 @@
       --accent: #5E7EFF; --accent-soft: rgba(94, 126, 255, .2); --danger: #FF453A;
       --good: #30D158; --good-soft: rgba(48, 209, 88, .18);
       --protein: #5E7EFF; --carbs: #CCFF00; --fat: #E5E5EA;
-      --cell-under: #2E3F85; --cell-over: #7A2A26; --sheet: #1C1C1E; --backdrop: rgba(0, 0, 0, .6);
+      --cell-under: #2E3F85; --cell-over: #7A2A26; --sheet: #1C1C1E; --backdrop: rgba(0, 0, 0, .7);
       color-scheme: dark;
     }
   }
@@ -43,7 +43,7 @@
     --accent: #5E7EFF; --accent-soft: rgba(94, 126, 255, .2); --danger: #FF453A;
     --good: #30D158; --good-soft: rgba(48, 209, 88, .18);
     --protein: #5E7EFF; --carbs: #CCFF00; --fat: #E5E5EA;
-    --cell-under: #2E3F85; --cell-over: #7A2A26; --sheet: #1C1C1E; --backdrop: rgba(0, 0, 0, .6);
+    --cell-under: #2E3F85; --cell-over: #7A2A26; --sheet: #1C1C1E; --backdrop: rgba(0, 0, 0, .7);
     color-scheme: dark;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -208,14 +208,17 @@
   .entry[data-id]:active { opacity: .6; }
   .chev { width: 8px; height: 8px; border-right: 2px solid var(--faint); border-bottom: 2px solid var(--faint); transform: rotate(-45deg); flex-shrink: 0; margin: 0 4px 0 2px; }
   .entry-sub { color: var(--muted); font-size: 15px; margin: -4px 0 14px; }
-  .nutri { background: var(--soft); border-radius: 12px; padding: 0 14px; }
-  .nutri > div { display: grid; grid-template-columns: 1fr auto 76px; gap: 10px; align-items: baseline; padding: 11px 0; border-top: .5px solid var(--line); font-size: 16px; }
-  .nutri > div:first-child { border-top: 0; }
-  .nutri b { font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
-  .nutri em { font-style: normal; color: var(--muted); text-align: right; font-size: 14px; font-variant-numeric: tabular-nums; }
-  .nutri .nutri-head { padding: 9px 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .02em; }
-  .nutri .nutri-head b, .nutri .nutri-head em { font-size: 12px; font-weight: 500; color: var(--muted); }
-  .nutri .nutri-dens { grid-template-columns: 1fr auto; }
+  .kcal-big { font-size: 17px; color: var(--muted); margin: 4px 0 16px; }
+  .kcal-big b { font-size: 34px; font-weight: 700; color: var(--text); letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
+  .kcal-big small { display: block; font-size: 13px; margin-top: 2px; }
+  .mtiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .mtile { background: var(--soft); border-radius: 12px; padding: 10px 12px; min-width: 0; }
+  .mtile span { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+  .mtile i { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .mtile b { display: block; font-size: 20px; font-weight: 600; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .mtile small { display: block; font-size: 12px; color: var(--muted); margin-top: 1px; white-space: nowrap; }
+  .dens-line { display: flex; justify-content: space-between; gap: 10px; font-size: 15px; color: var(--muted); margin: 14px 2px 0; }
+  .dens-line b { font-weight: 600; }
   .delete-link { background: none; color: var(--danger); font-weight: 400; margin-top: 14px; }
   .tag { display: inline-block; font-size: 11px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase;
          color: var(--accent); background: var(--accent-soft); border-radius: 5px; padding: 2px 6px; margin-right: 6px; vertical-align: 2px; }
@@ -1202,16 +1205,16 @@ function openEntry(id) {
   const when = fmtTime(e.time);
   if (e.kind === "sport") {
     $("entryBody").innerHTML = `<p class="entry-sub">Sport · ${when} · ${r(e.minutes)} min</p>
-      <div class="nutri"><div><span>Verbrauch</span><b>${r(e.kcal)} kcal</b></div></div>`;
+      <div class="kcal-big"><b>${r(e.kcal)}</b> kcal<small>verbraucht</small></div>`;
   } else {
     const per = v => e.grams > 0 ? v / e.grams * 100 : 0;
-    const row = (label, v, unit) => `<div><span>${label}</span><b>${label === "Kalorien" ? r(v) : fmtDensity(v)} ${unit}</b><em>${label === "Kalorien" ? r(per(v)) : fmtDensity(per(v))} ${unit}</em></div>`;
     const d = density(e);
+    const tile = (label, v, color) => `<div class="mtile"><span><i style="background:${color}"></i>${label}</span>
+      <b>${fmtDensity(v)} g</b><small>${fmtDensity(per(v))} g / 100 g</small></div>`;
     $("entryBody").innerHTML = `<p class="entry-sub">${when} · ${r(e.grams)} g</p>
-      <div class="nutri"><div class="nutri-head"><span></span><b>Gegessen</b><em>pro 100 g</em></div>
-        ${row("Kalorien", e.kcal, "kcal")}${row("Protein", e.protein, "g")}${row("Kohlenhydrate", e.carbs, "g")}${row("Fett", e.fat, "g")}
-        <div class="nutri-dens"><span>Protein-Dichte</span><b class="dens ${densClass(d)}">${fmtDensity(d)} g pro 100 kcal</b></div>
-      </div>`;
+      <div class="kcal-big"><b>${r(e.kcal)}</b> kcal<small>${r(per(e.kcal))} kcal pro 100 g</small></div>
+      <div class="mtiles">${tile("Protein", e.protein, COLORS.protein)}${tile("KH", e.carbs, COLORS.carbs)}${tile("Fett", e.fat, COLORS.fat)}</div>
+      <p class="dens-line">Protein-Dichte <b class="dens ${densClass(d)}">${fmtDensity(d)} g pro 100 kcal</b></p>`;
   }
   $("entryDelete").hidden = !(day === todayStr() || backfill);
   $("entrySheet").hidden = false;
