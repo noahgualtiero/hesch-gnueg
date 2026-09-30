@@ -112,7 +112,8 @@
   .sheet-backdrop.searching .combo-list::after { content: ""; display: block; height: var(--kb, 45vh); }
   .sheet-backdrop.searching #status, .sheet-backdrop.searching #reader { display: none; }
   .sheet-backdrop.searching .sheet::before, .sheet-backdrop.searching .sheet-head,
-  .sheet-backdrop.searching #barcodeSection, .sheet-backdrop.searching #newFoodBtn { display: none; }
+  .sheet-backdrop.searching #barcodeSection, .sheet-backdrop.searching #newFoodBtn,
+  .sheet-backdrop.searching #recipeSection { display: none; }
   .sheet-backdrop.searching #searchCancel { display: block; }
   .combo-list { margin-top: 8px; max-height: 280px; overflow-y: auto; border-radius: 12px; background: var(--card);
                 box-shadow: 0 0 0 .5px var(--line), 0 8px 24px rgba(0, 0, 0, .12); overscroll-behavior: contain; }
@@ -144,6 +145,15 @@
   .choice-opt small { font-size: 12px; font-weight: 400; color: var(--muted); }
   .choice-opt input { display: none; }
   .manual { margin-top: 10px; }
+  .recipe-btn { margin-top: 0; }
+  .row-end { align-items: flex-end; }
+  #recipeSection { margin-top: 6px; }
+  .recipe-hint, .recipe-meta { font-size: 13px; color: var(--muted); line-height: 1.45; margin: 4px 0 6px; }
+  .recipe-shot { width: 100%; }
+  .recipe-cfg-link { display: block; margin: 14px 0 0; font-size: 13px; color: var(--muted); }
+  .recipe-ing { margin-top: 14px; font-size: 15px; }
+  .recipe-ing summary { cursor: pointer; color: var(--accent); }
+  .recipe-ing ul { margin: 8px 0 0; padding-left: 20px; color: var(--muted); line-height: 1.5; }
   .product-text { flex: 1; min-width: 0; }
   .favbtn { width: 40px; height: 40px; margin: 0; padding: 0; border-radius: 50%; background: var(--soft); color: var(--muted);
             font-size: 22px; line-height: 1; flex-shrink: 0; }
@@ -510,6 +520,10 @@
         <div id="foodList" class="combo-list" role="listbox" hidden></div>
       </div>
       <button class="linkbtn newfood" id="newFoodBtn">+ Eigenes Lebensmittel erstellen</button>
+      <div id="recipeSection">
+        <label>Rezept</label>
+        <button class="secondary recipe-btn" id="recipeBtn">Rezept per Link oder Screenshot</button>
+      </div>
       <div id="status" class="status"></div>
       <div id="reader"></div>
     </div>
@@ -534,6 +548,46 @@
         </div>
       </div>
       <button id="addBtn">Hinzufügen</button>
+    </div>
+  <div id="recipeStep" hidden>
+      <div id="recipeConfig" class="recipe-config">
+        <p class="recipe-hint">Einmalig einrichten: Adresse deines Cloudflare Workers und der Zugangscode, den du dort als APP_TOKEN gesetzt hast.</p>
+        <label for="rWorker">Worker-Adresse</label>
+        <input type="text" id="rWorker" inputmode="url" autocomplete="off" placeholder="https://gnueg-rezept.….workers.dev">
+        <label for="rToken">Zugangscode</label>
+        <input type="password" id="rToken" autocomplete="off">
+        <button id="rCfgSave">Speichern</button>
+      </div>
+      <div id="recipeInput" hidden>
+        <label for="rUrl">Link zum Rezept</label>
+        <div class="row">
+          <input type="text" id="rUrl" inputmode="url" autocomplete="off" placeholder="https://…">
+          <button class="secondary" id="rUrlGo" style="flex:0 0 auto;width:auto;margin-top:0">Auslesen</button>
+        </div>
+        <label>oder Screenshot</label>
+        <label class="choice-opt recipe-shot">Screenshot oder Foto wählen
+          <small>z. B. aus Instagram, einem Kochbuch oder einer App</small>
+          <input type="file" id="rFile" accept="image/*">
+        </label>
+        <button class="linkbtn recipe-cfg-link" id="recipeCfgLink">Worker-Einstellungen</button>
+      </div>
+      <div id="recipeStatus" class="status"></div>
+      <div id="recipeResult" hidden>
+        <label for="rName">Name</label>
+        <input type="text" id="rName" maxlength="60">
+        <p class="recipe-meta" id="rMeta"></p>
+        <div class="row">
+          <div><label for="rPortion">1 Portion (g)</label><input type="number" id="rPortion" min="1" step="1"></div>
+          <div><label for="rKcal">Kalorien (kcal)</label><input type="number" id="rKcal" min="0" step="1"></div>
+        </div>
+        <div class="row row-end">
+          <div><label for="rProtein">Protein (g)</label><input type="number" id="rProtein" min="0" step="0.1"></div>
+          <div><label for="rCarbs">Kohlenhydrate (g)</label><input type="number" id="rCarbs" min="0" step="0.1"></div>
+          <div><label for="rFat">Fett (g)</label><input type="number" id="rFat" min="0" step="0.1"></div>
+        </div>
+        <details id="rIngWrap" class="recipe-ing"><summary>Zutaten</summary><ul id="rIngredients"></ul></details>
+        <button id="rSave">Speichern und weiter</button>
+      </div>
     </div>
   <div id="createStep" hidden>
       <button class="linkbtn" id="createBack" hidden>‹ Zurück</button>
@@ -994,6 +1048,103 @@ async function fetchOnline(q) {
   if (!$("foodList").hidden && norm($("foodSearch").value.trim()) === key) renderFoodList();
 }
 
+// Rezept-Import per Link oder Screenshot (über den eigenen Cloudflare Worker mit OpenAI)
+const RECIPE_CFG_KEY = "naehrwert-rezept-worker";
+const recipeCfg = () => { try { return JSON.parse(localStorage.getItem(RECIPE_CFG_KEY)) || {}; } catch { return {}; } };
+let recipeData = null;
+
+function openRecipe() {
+  const cfg = recipeCfg();
+  $("rUrl").value = ""; $("recipeStatus").textContent = ""; $("recipeStatus").className = "status";
+  $("recipeResult").hidden = true; recipeData = null;
+  $("rWorker").value = cfg.url || ""; $("rToken").value = cfg.token || "";
+  $("recipeConfig").hidden = !!(cfg.url && cfg.token);
+  $("recipeInput").hidden = !(cfg.url && cfg.token);
+  showStep("recipe");
+}
+function recipeStatus(msg, error) {
+  $("recipeStatus").textContent = msg;
+  $("recipeStatus").className = "status" + (error ? " error" : "");
+}
+$("recipeBtn").addEventListener("click", openRecipe);
+$("recipeCfgLink").addEventListener("click", () => { $("recipeConfig").hidden = !$("recipeConfig").hidden; });
+$("rCfgSave").addEventListener("click", () => {
+  const url = $("rWorker").value.trim().replace(/\/+$/, ""), token = $("rToken").value.trim();
+  if (!/^https:\/\//.test(url) || !token) { recipeStatus("Bitte Worker-Adresse (https://…) und Zugangscode eingeben.", true); return; }
+  try { localStorage.setItem(RECIPE_CFG_KEY, JSON.stringify({ url, token })); } catch {}
+  $("recipeConfig").hidden = true; $("recipeInput").hidden = false;
+  recipeStatus("Gespeichert. Jetzt Link einfügen oder Screenshot wählen.");
+});
+
+async function recipeRequest(payload) {
+  const cfg = recipeCfg();
+  recipeStatus("Rezept wird ausgelesen … das dauert ein paar Sekunden.");
+  $("recipeResult").hidden = true;
+  $("rUrlGo").disabled = true;
+  try {
+    const res = await fetch(cfg.url, { method: "POST", headers: { "Content-Type": "application/json", "X-App-Token": cfg.token },
+                                       body: JSON.stringify(payload) });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Fehler ${res.status}`);
+    if (!data.name || !data.per_portion || !data.per_portion.kcal) throw new Error(data.note || "Kein Rezept erkannt.");
+    showRecipe(data);
+  } catch (e) {
+    recipeStatus(e.message === "Failed to fetch" ? "Worker nicht erreichbar. Adresse prüfen." : e.message, true);
+  } finally {
+    $("rUrlGo").disabled = false;
+  }
+}
+function showRecipe(d) {
+  recipeData = d;
+  const p = d.per_portion;
+  $("rName").value = d.name;
+  $("rPortion").value = Math.round(d.portion_grams) || "";
+  $("rKcal").value = Math.round(p.kcal); $("rProtein").value = Math.round(p.protein * 10) / 10;
+  $("rCarbs").value = Math.round(p.carbs * 10) / 10; $("rFat").value = Math.round(p.fat * 10) / 10;
+  $("rMeta").textContent = `${d.servings ? `Rezept für ${d.servings} Portionen · ` : ""}` +
+    (d.source === "angegeben" ? "Nährwerte aus dem Rezept übernommen" : "Nährwerte aus den Zutaten geschätzt") +
+    (d.note ? ` · ${d.note}` : "");
+  $("rIngredients").innerHTML = (d.ingredients || []).map(i => `<li>${esc(i)}</li>`).join("");
+  $("rIngWrap").hidden = !(d.ingredients || []).length;
+  $("recipeResult").hidden = false;
+  recipeStatus("Prüfe die Werte kurz und passe sie bei Bedarf an.");
+}
+$("rUrlGo").addEventListener("click", () => {
+  const url = $("rUrl").value.trim();
+  if (!/^https?:\/\//i.test(url)) { recipeStatus("Bitte einen vollständigen Link einfügen (https://…).", true); return; }
+  recipeRequest({ url });
+});
+$("rUrl").addEventListener("keydown", e => { if (e.key === "Enter") $("rUrlGo").click(); });
+// Screenshot verkleinern (max. 1600 px), damit die Übertragung schnell und günstig bleibt
+$("rFile").addEventListener("change", async e => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (!file) return;
+  try {
+    const img = await loadImage(file);
+    const scale = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement("canvas");
+    c.width = Math.round(img.naturalWidth * scale); c.height = Math.round(img.naturalHeight * scale);
+    c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+    URL.revokeObjectURL(img.src);
+    recipeRequest({ image: c.toDataURL("image/jpeg", 0.85) });
+  } catch { recipeStatus("Das Bild konnte nicht gelesen werden.", true); }
+});
+// Als eigenes Lebensmittel speichern (Werte pro Portion → intern pro 100 g)
+$("rSave").addEventListener("click", () => {
+  const name = $("rName").value.trim();
+  const portion = parseFloat($("rPortion").value) || 0;
+  const v = ["rKcal", "rProtein", "rCarbs", "rFat"].map(id => parseFloat(String($(id).value).replace(",", ".")) || 0);
+  if (!name || !portion || !v[0]) { recipeStatus("Name, Portion in Gramm und Kalorien werden benötigt.", true); return; }
+  const f = 100 / portion;
+  const c = { id: String(Date.now()), name, portion, kcal: v[0] * f, protein: v[1] * f, carbs: v[2] * f, fat: v[3] * f };
+  customs.push(c);
+  writeList(CUSTOM_KEY, customs);
+  buildSelect();
+  showProduct(customProduct(c), portion);
+  setStatus(`„${name}“ als eigenes Lebensmittel gespeichert.`);
+});
+
 // Favoriten: Stern beim Produkt, erscheinen zuoberst im Auswahlfeld
 function renderFavs() { buildSelect(); }
 function updateFavBtn() {
@@ -1129,9 +1280,10 @@ function showStep(step) {
   $("captureStep").hidden = step !== "capture";
   $("addCard").hidden = step !== "add";
   $("createStep").hidden = step !== "create";
+  $("recipeStep").hidden = step !== "recipe";
   $("headBack").hidden = step === "capture";
   const dayName = new Date(day + "T12:00:00").toLocaleDateString("de-CH", { day: "numeric", month: "short" });
-  $("sheetTitle").textContent = step === "create" ? "Neues Lebensmittel"
+  $("sheetTitle").textContent = step === "create" ? "Neues Lebensmittel" : step === "recipe" ? "Rezept"
     : day !== todayStr() ? "Nachtragen " + dayName : "Hinzufügen";
 }
 function openSheet() {
@@ -1155,7 +1307,10 @@ function closeSheet() {
 }
 $("openSheet").addEventListener("click", openSheet);
 $("closeSheet").addEventListener("click", closeSheet);
-$("headBack").addEventListener("click", () => ($("createStep").hidden ? $("backBtn") : $("createBack")).click());
+$("headBack").addEventListener("click", () => {
+  if (!$("recipeStep").hidden) return showStep("capture");
+  ($("createStep").hidden ? $("backBtn") : $("createBack")).click();
+});
 $("backBtn").addEventListener("click", () => { setStatus(""); showStep("capture"); });
 $("sheet").addEventListener("click", e => { if (e.target === $("sheet")) closeSheet(); });
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("sheet").hidden) closeSheet(); });
