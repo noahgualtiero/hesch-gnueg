@@ -372,6 +372,10 @@
   .ptr-arc { fill: none; stroke: var(--muted); stroke-width: 3; stroke-linecap: round; stroke-dasharray: 69.1; stroke-dashoffset: 69.1; }
   .ptr.loading svg { animation: ptrSpin .7s linear infinite; }
   .ptr.loading .ptr-arc { stroke-dashoffset: 48 !important; stroke: var(--accent); }
+  .spin { width: 32px; height: 32px; margin: 28px auto 4px; }
+  .spin svg { width: 100%; height: 100%; animation: ptrSpin .7s linear infinite; }
+  .spin .ptr-arc { stroke-dashoffset: 48; stroke: var(--accent); }
+  #recipeSpin:not([hidden]) + #recipeStatus { text-align: center; }
   @keyframes ptrSpin { from { transform: rotate(-90deg); } to { transform: rotate(270deg); } }
   main.ptr-anim { transition: transform .3s cubic-bezier(.2, .8, .2, 1); }
 
@@ -607,6 +611,7 @@
         </label>
         <button class="linkbtn recipe-cfg-link" id="recipeCfgLink">Worker-Einstellungen</button>
       </div>
+      <div class="spin" id="recipeSpin" hidden aria-hidden="true"><svg viewBox="0 0 32 32"><circle class="ptr-track" cx="16" cy="16" r="11"/><circle class="ptr-arc" cx="16" cy="16" r="11"/></svg></div>
       <div id="recipeStatus" class="status"></div>
       <div id="recipeResult" hidden>
         <label for="rName">Name</label>
@@ -1168,9 +1173,10 @@ $("rCfgSave").addEventListener("click", () => {
 
 async function recipeRequest(payload) {
   const cfg = recipeCfg();
-  recipeStatus("Rezept wird ausgelesen … das dauert ein paar Sekunden.");
+  recipeStatus("Rezept wird ausgelesen …");
   $("recipeResult").hidden = true;
   $("rUrlGo").disabled = true;
+  $("recipeSpin").hidden = false;
   try {
     const res = await fetch(cfg.url, { method: "POST", headers: { "Content-Type": "application/json", "X-App-Token": cfg.token },
                                        body: JSON.stringify(payload) });
@@ -1182,6 +1188,7 @@ async function recipeRequest(payload) {
     recipeStatus(e.message === "Failed to fetch" ? "Worker nicht erreichbar. Adresse prüfen." : e.message, true);
   } finally {
     $("rUrlGo").disabled = false;
+    $("recipeSpin").hidden = true;
   }
 }
 // Neue Worker-Antwort: Zutaten mit Gramm → Werte aus der Nährwertdatenbank, sonst Schätzung des Workers
