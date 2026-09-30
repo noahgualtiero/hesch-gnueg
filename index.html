@@ -204,7 +204,19 @@
   .e-meta { font-size: 13px; color: var(--muted); margin-top: 2px; font-variant-numeric: tabular-nums; }
   .e-kcal { font-weight: 400; font-size: 17px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .e-kcal.sport { color: var(--accent); }
-  .entry button { width: 28px; height: 28px; margin: 0; padding: 0; border-radius: 50%; background: var(--soft); color: var(--muted); font-size: 15px; flex-shrink: 0; }
+  .entry[data-id] { cursor: pointer; }
+  .entry[data-id]:active { opacity: .6; }
+  .chev { width: 8px; height: 8px; border-right: 2px solid var(--faint); border-bottom: 2px solid var(--faint); transform: rotate(-45deg); flex-shrink: 0; margin: 0 4px 0 2px; }
+  .entry-sub { color: var(--muted); font-size: 15px; margin: -4px 0 14px; }
+  .nutri { background: var(--soft); border-radius: 12px; padding: 0 14px; }
+  .nutri > div { display: grid; grid-template-columns: 1fr auto 76px; gap: 10px; align-items: baseline; padding: 11px 0; border-top: .5px solid var(--line); font-size: 16px; }
+  .nutri > div:first-child { border-top: 0; }
+  .nutri b { font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+  .nutri em { font-style: normal; color: var(--muted); text-align: right; font-size: 14px; font-variant-numeric: tabular-nums; }
+  .nutri .nutri-head { padding: 9px 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .02em; }
+  .nutri .nutri-head b, .nutri .nutri-head em { font-size: 12px; font-weight: 500; color: var(--muted); }
+  .nutri .nutri-dens { grid-template-columns: 1fr auto; }
+  .delete-link { background: none; color: var(--danger); font-weight: 400; margin-top: 14px; }
   .tag { display: inline-block; font-size: 11px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase;
          color: var(--accent); background: var(--accent-soft); border-radius: 5px; padding: 2px 6px; margin-right: 6px; vertical-align: 2px; }
   #resetBtn { margin-top: 14px; background: none; color: var(--danger); font-weight: 400; font-size: 17px; padding: 8px; }
@@ -422,6 +434,13 @@
     <h1 id="wizTitle" class="wiz-title">Willkommen bei Gnueg</h1>
     <p class="wiz-intro" id="wizIntro">Ein paar kurze Fragen, dann berechne ich dein Tagesziel.</p>
     <div id="wizBody"></div>
+  </div>
+</div>
+<div class="sheet-backdrop" id="entrySheet" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="entryTitle">
+    <div class="sheet-head"><h2 id="entryTitle"></h2><button class="secondary navbtn" id="closeEntry" aria-label="Schliessen">×</button></div>
+    <div id="entryBody"></div>
+    <button class="delete-link" id="entryDelete">Eintrag löschen</button>
   </div>
 </div>
 <div class="sheet-backdrop" id="confirmSheet" hidden>
@@ -1140,7 +1159,7 @@ function openConfirm({ title, text, ok = "Löschen", action, returnFocus }) {
 }
 function closeConfirm() {
   $("confirmSheet").hidden = true;
-  document.body.classList.remove("sheet-open");
+  if (!document.querySelector(".sheet-backdrop:not([hidden])")) document.body.classList.remove("sheet-open");
   confirmAction = null;
   if (confirmReturn && document.contains(confirmReturn)) confirmReturn.focus();
 }
@@ -1173,6 +1192,44 @@ $("nextDay").addEventListener("click", () => shiftDay(1));
 $("todayBtn").addEventListener("click", () => setDay(todayStr()));
 $("backfillBtn").addEventListener("click", () => { backfill = true; render(); });
 
+// Detailansicht eines Eintrags
+let entryOpenId = null;
+function openEntry(id) {
+  const e = entries.find(x => x.id === id);
+  if (!e) return;
+  entryOpenId = id;
+  $("entryTitle").textContent = e.name;
+  const when = fmtTime(e.time);
+  if (e.kind === "sport") {
+    $("entryBody").innerHTML = `<p class="entry-sub">Sport · ${when} · ${r(e.minutes)} min</p>
+      <div class="nutri"><div><span>Verbrauch</span><b>${r(e.kcal)} kcal</b></div></div>`;
+  } else {
+    const per = v => e.grams > 0 ? v / e.grams * 100 : 0;
+    const row = (label, v, unit) => `<div><span>${label}</span><b>${label === "Kalorien" ? r(v) : fmtDensity(v)} ${unit}</b><em>${label === "Kalorien" ? r(per(v)) : fmtDensity(per(v))} ${unit}</em></div>`;
+    const d = density(e);
+    $("entryBody").innerHTML = `<p class="entry-sub">${when} · ${r(e.grams)} g</p>
+      <div class="nutri"><div class="nutri-head"><span></span><b>Gegessen</b><em>pro 100 g</em></div>
+        ${row("Kalorien", e.kcal, "kcal")}${row("Protein", e.protein, "g")}${row("Kohlenhydrate", e.carbs, "g")}${row("Fett", e.fat, "g")}
+        <div class="nutri-dens"><span>Protein-Dichte</span><b class="dens ${densClass(d)}">${fmtDensity(d)} g pro 100 kcal</b></div>
+      </div>`;
+  }
+  $("entryDelete").hidden = !(day === todayStr() || backfill);
+  $("entrySheet").hidden = false;
+  document.body.classList.add("sheet-open");
+  $("closeEntry").focus();
+}
+function closeEntry() {
+  entryOpenId = null;
+  $("entrySheet").hidden = true;
+  if (!document.querySelector(".sheet-backdrop:not([hidden])")) document.body.classList.remove("sheet-open");
+}
+$("meals").addEventListener("click", ev => { const row = ev.target.closest(".entry[data-id]"); if (row) openEntry(+row.dataset.id); });
+$("meals").addEventListener("keydown", ev => { if ((ev.key === "Enter" || ev.key === " ") && ev.target.matches(".entry[data-id]")) { ev.preventDefault(); openEntry(+ev.target.dataset.id); } });
+$("closeEntry").addEventListener("click", closeEntry);
+$("entrySheet").addEventListener("click", ev => { if (ev.target === $("entrySheet")) closeEntry(); });
+$("entryDelete").addEventListener("click", () => { if (entryOpenId != null) removeEntry(entryOpenId); });
+document.addEventListener("keydown", ev => { if (ev.key === "Escape" && !$("entrySheet").hidden && $("confirmSheet").hidden) closeEntry(); });
+
 function removeEntry(id) {
   const e = entries.find(x => x.id === id);
   if (!e) return;
@@ -1180,7 +1237,7 @@ function removeEntry(id) {
     title: `„${e.name}“ löschen?`,
     text: e.kind === "sport" ? `${r(e.minutes)} min · ${r(e.kcal)} kcal Sport werden entfernt.`
                              : `${r(e.grams)} g · ${r(e.kcal)} kcal werden aus diesem Tag entfernt.`,
-    action: () => { entries = entries.filter(x => x.id !== id); save(); render(); showToast(`„${e.name}“ gelöscht`); }
+    action: () => { entries = entries.filter(x => x.id !== id); save(); closeEntry(); render(); showToast(`„${e.name}“ gelöscht`); }
   });
 }
 
@@ -1359,7 +1416,7 @@ function render() {
   document.querySelectorAll("#sortBar button").forEach(b => b.setAttribute("aria-pressed", b.dataset.sort === sortMode));
   $("sortBar").hidden = entries.filter(food).length < 2;
   $("meals").innerHTML = list.length
-    ? list.map(e => `<div class="entry">${e.kind === "sport"
+    ? list.map(e => `<div class="entry" role="button" tabindex="0" data-id="${e.id}">${e.kind === "sport"
           ? `<div class="e-main"><div class="e-name"><span class="tag">Sport</span>${esc(e.name)}</div>
                <div class="e-meta">${fmtTime(e.time)} · ${r(e.minutes)} min</div></div>
              <div class="e-kcal sport">+${r(e.kcal)} kcal</div>`
@@ -1367,7 +1424,7 @@ function render() {
                <div class="e-meta">${fmtTime(e.time)} · ${r(e.grams)} g ·
                  <span class="dens ${densClass(density(e))}">${fmtDensity(density(e))} g P/100 kcal</span></div></div>
              <div class="e-kcal">${r(e.kcal)} kcal</div>`}
-        ${editable ? `<button onclick="removeEntry(${e.id})" aria-label="Entfernen">×</button>` : ""}</div>`).join("")
+        <span class="chev" aria-hidden="true"></span></div>`).join("")
     : '<p class="empty">Noch nichts erfasst.</p>';
   renderHeatmap();
 }
