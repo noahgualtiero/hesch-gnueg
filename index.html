@@ -20,9 +20,9 @@
     --bg: #F2F2F7; --card: #FFFFFF; --text: #000000; --muted: rgba(60, 60, 67, .6); --faint: rgba(60, 60, 67, .3);
     --line: rgba(60, 60, 67, .18); --soft: rgba(118, 118, 128, .12); --field: rgba(118, 118, 128, .12);
     --accent: #2A55FF; --accent-soft: rgba(42, 85, 255, .12); --lime: #CCFF00; --danger: #FF3B30;
-    --good: #248A3D; --good-soft: rgba(52, 199, 89, .15);
-    --protein: #2A55FF; --carbs: #B8E600; --fat: #1C1C1E;
-    --cell-under: #BFCDFF; --cell-over: #FFB3AE; --sheet: #FFFFFF; --backdrop: rgba(0, 0, 0, .5);
+    --good: #2A55FF; --good-soft: rgba(42, 85, 255, .12);
+    --protein: #2A55FF; --carbs: #C7C7CC; --fat: #1C1C1E;
+    --cell-under: #D1D1D6; --cell-over: #8E8E93; --sheet: #FFFFFF; --backdrop: rgba(0, 0, 0, .5);
     --radius: 12px;
     color-scheme: light;
   }
@@ -31,9 +31,9 @@
       --bg: #000000; --card: #1C1C1E; --text: #FFFFFF; --muted: rgba(235, 235, 245, .6); --faint: rgba(235, 235, 245, .3);
       --line: rgba(84, 84, 88, .6); --soft: rgba(118, 118, 128, .24); --field: rgba(118, 118, 128, .24);
       --accent: #5E7EFF; --accent-soft: rgba(94, 126, 255, .2); --danger: #FF453A;
-      --good: #30D158; --good-soft: rgba(48, 209, 88, .18);
-      --protein: #5E7EFF; --carbs: #CCFF00; --fat: #E5E5EA;
-      --cell-under: #2E3F85; --cell-over: #7A2A26; --sheet: #1C1C1E; --backdrop: rgba(0, 0, 0, .7);
+      --good: #5E7EFF; --good-soft: rgba(94, 126, 255, .2);
+      --protein: #5E7EFF; --carbs: #636366; --fat: #E5E5EA;
+      --cell-under: #3A3A3C; --cell-over: #8E8E93; --sheet: #1C1C1E; --backdrop: rgba(0, 0, 0, .7);
       color-scheme: dark;
     }
   }
@@ -41,9 +41,9 @@
     --bg: #000000; --card: #1C1C1E; --text: #FFFFFF; --muted: rgba(235, 235, 245, .6); --faint: rgba(235, 235, 245, .3);
     --line: rgba(84, 84, 88, .6); --soft: rgba(118, 118, 128, .24); --field: rgba(118, 118, 128, .24);
     --accent: #5E7EFF; --accent-soft: rgba(94, 126, 255, .2); --danger: #FF453A;
-    --good: #30D158; --good-soft: rgba(48, 209, 88, .18);
-    --protein: #5E7EFF; --carbs: #CCFF00; --fat: #E5E5EA;
-    --cell-under: #2E3F85; --cell-over: #7A2A26; --sheet: #1C1C1E; --backdrop: rgba(0, 0, 0, .7);
+    --good: #5E7EFF; --good-soft: rgba(94, 126, 255, .2);
+    --protein: #5E7EFF; --carbs: #636366; --fat: #E5E5EA;
+    --cell-under: #3A3A3C; --cell-over: #8E8E93; --sheet: #1C1C1E; --backdrop: rgba(0, 0, 0, .7);
     color-scheme: dark;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -157,7 +157,7 @@
   .product-text { flex: 1; min-width: 0; }
   .favbtn { width: 40px; height: 40px; margin: 0; padding: 0; border-radius: 50%; background: var(--soft); color: var(--muted);
             font-size: 22px; line-height: 1; flex-shrink: 0; }
-  .favbtn[aria-pressed="true"] { color: #FFCC00; background: rgba(255, 204, 0, .16); }
+  .favbtn[aria-pressed="true"] { color: var(--accent); background: var(--accent-soft); }
   .linkbtn.newfood { display: block; margin: 22px auto 0; font-size: 13px; color: var(--muted); text-align: center; }
   .create-mode { margin: 0 0 4px; }
   .ing-rows:empty { display: none; }
@@ -236,7 +236,7 @@
   .addrow { display: flex; gap: 10px; margin: 20px 0 0; }
   .addrow .addbtn { margin: 0; }
   .addbtn { font-size: 16px; font-weight: 600; padding: 14px 10px; border-radius: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .addbtn.sport { flex: 0 0 34%; background: var(--accent-soft); color: var(--accent); }
+  .addbtn.sport { flex: 0 0 34%; background: var(--soft); color: var(--text); }
   .backfill { display: block; margin: 12px auto 0; font-size: 15px; color: var(--muted); }
   #toast { text-align: center; color: var(--good); font-weight: 500; font-size: 15px; min-height: 0; margin: 10px 0 0; }
   #toast:empty { display: none; }
@@ -253,9 +253,9 @@
                           background: var(--faint); margin-right: 5px; vertical-align: 1px; }
   .e-side .dens.good, .e-side .dens.bad { color: var(--muted); font-weight: 400; }
   .e-side .dens.good::before { background: var(--good); }
-  .e-side .dens.bad::before { background: var(--danger); }
+  .e-side .dens.bad::before { background: var(--faint); }
   .e-kcal { font-weight: 400; font-size: 15px; color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .e-kcal.sport { color: var(--accent); }
+  .e-kcal.sport { color: var(--text); }
   .entry[data-id] { cursor: pointer; }
   .entry[data-id]:active { opacity: .6; }
   .chev { width: 8px; height: 8px; border-right: 2px solid var(--faint); border-bottom: 2px solid var(--faint); transform: rotate(-45deg); flex-shrink: 0; margin: 0 4px 0 2px; }
@@ -275,11 +275,11 @@
   .dens-legend span { white-space: nowrap; }
   .dens-legend i { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin: 0 4px 0 2px; vertical-align: 1px; }
   .dens-legend i.good { background: var(--good); }
-  .dens-legend i.bad { background: var(--danger); }
+  .dens-legend i.bad { background: var(--faint); }
   #entryBody .legend { margin: 8px 0 16px; }
   .delete-link { background: none; color: var(--danger); font-weight: 400; margin-top: 14px; }
   .tag { display: inline-block; font-size: 11px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase;
-         color: var(--accent); background: var(--accent-soft); border-radius: 5px; padding: 1px 5px; margin-right: 6px; vertical-align: 1px; }
+         color: var(--muted); background: var(--soft); border-radius: 5px; padding: 1px 5px; margin-right: 6px; vertical-align: 1px; }
   button.danger { background: var(--danger); color: #FFFFFF; }
 
   /* Sortier-Umschalter im iOS-Stil */
@@ -289,7 +289,7 @@
   .segmented button[aria-pressed="true"] { background: var(--card); font-weight: 600; box-shadow: 0 1px 3px rgba(0, 0, 0, .12); }
   .dens { white-space: nowrap; }
   .dens.good { color: var(--good); font-weight: 500; }
-  .dens.bad { color: var(--danger); font-weight: 500; }
+  .dens.bad { color: var(--muted); font-weight: 500; }
 
   /* Profil */
   details.card > summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between;
@@ -315,8 +315,8 @@
   .cell.k-ok { background: var(--accent); }
   .cell.k-under { background: var(--cell-under); }
   .cell.k-over { background: var(--cell-over); }
-  .cell.p-ok::after { content: ""; position: absolute; inset: 4px; border-radius: 50%; background: var(--lime);
-                      box-shadow: 0 0 0 1px rgba(0, 0, 0, .45); }
+  .cell.p-ok::after { content: ""; position: absolute; inset: 4px; border-radius: 50%; background: #FFFFFF;
+                      box-shadow: 0 0 0 1px rgba(0, 0, 0, .2); }
   .cell.sel { outline: 2px solid var(--text); outline-offset: 1px; }
   .cell.today { box-shadow: inset 0 0 0 1.5px var(--text); }
   button.cell { width: 16px; height: 16px; }
