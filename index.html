@@ -403,8 +403,8 @@
   .sheet.confirm h2 { margin: 6px 0 6px; font-size: 16px; font-weight: 600; }
   .sheet.confirm p { margin: 0 0 4px; line-height: 1.4; color: var(--muted); font-size: 14px; }
   .sheet.confirm .row button { margin-top: 18px; }
-  #exportSheet button:not(.linkbtn) { margin-top: 12px; }
-  #exportSheet h2 + p { margin-bottom: 6px; }
+  #exportSheet button:not(.linkbtn), #importSheet button:not(.linkbtn) { margin-top: 12px; }
+  #exportSheet h2 + p, #importSheet h2 + p { margin-bottom: 6px; }
   .export-cancel { display: block; margin: 16px auto 0; font-size: 16px; color: var(--muted); }
   @keyframes sheetIn { from { transform: translateY(100%); } to { transform: none; } }
   @media (min-width: 640px) {
@@ -531,6 +531,15 @@
     <button id="exportFoods">Lebensmittel und Rezepte</button>
     <button class="secondary" id="exportAll">Alle Daten</button>
     <button class="linkbtn export-cancel" id="exportCancel">Abbrechen</button>
+  </div>
+</div>
+<div class="sheet-backdrop" id="importSheet" hidden>
+  <div class="sheet confirm" role="dialog" aria-modal="true" aria-labelledby="importTitle">
+    <h2 id="importTitle">Was möchtest du importieren?</h2>
+    <p id="importText"></p>
+    <button id="importFoods">Nur Lebensmittel und Rezepte</button>
+    <button class="secondary" id="importAll">Alle Daten</button>
+    <button class="linkbtn export-cancel" id="importCancel">Abbrechen</button>
   </div>
 </div>
 <div class="sheet-backdrop" id="confirmSheet" hidden>
@@ -2155,35 +2164,48 @@ $("importFile").addEventListener("change", async e => {
     return;
   }
   const when = parsed.exported ? ` vom ${new Date(parsed.exported).toLocaleDateString("de-CH")}` : "";
-  const foodsOnly = keys.every(k => FOOD_KEYS.includes(k));
-  if (foodsOnly) {
-    let n = 0;
-    try { n = (JSON.parse(data[CUSTOM_KEY] || "[]") || []).length; } catch {}
+  const foodKeys = keys.filter(k => FOOD_KEYS.includes(k));
+  let n = 0;
+  try { n = (JSON.parse(data[CUSTOM_KEY] || "[]") || []).length; } catch {}
+  const importFoods = () => {
+    try { for (const k of foodKeys) localStorage.setItem(k, mergeList(localStorage.getItem(k), data[k])); } catch {}
+    location.reload();
+  };
+  const importAll = () => {
+    try {
+      for (const k of allDataKeys()) localStorage.removeItem(k);
+      for (const k of keys) localStorage.setItem(k, data[k]);
+    } catch {}
+    location.reload();
+  };
+  const foodsText = `${n} ${n === 1 ? "eigenen Eintrag" : "eigenen Lebensmitteln und Rezepten"}`;
+  if (foodKeys.length === keys.length) {
     openConfirm({
       title: "Lebensmittel importieren?",
-      text: `Export${when} mit ${n} ${n === 1 ? "eigenen Eintrag" : "eigenen Lebensmitteln und Rezepten"}. Sie werden zu deinen bestehenden hinzugefügt, gleichnamige werden ersetzt. Deine Tage bleiben unverändert.`,
-      ok: "Importieren",
-      action: () => {
-        try { for (const k of keys) localStorage.setItem(k, mergeList(localStorage.getItem(k), data[k])); } catch {}
-        location.reload();
-      }
+      text: `Export${when} mit ${foodsText}. Sie werden zu deinen bestehenden hinzugefügt, gleichnamige werden ersetzt. Deine Tage bleiben unverändert.`,
+      ok: "Importieren", action: importFoods
     });
     return;
   }
+  // Vollständiges Backup: auswählen, was übernommen wird
   const days = keys.filter(k => /^naehrwert-\d{4}-\d{2}-\d{2}$/.test(k)).length;
-  openConfirm({
-    title: "Alle Daten importieren?",
-    text: `Backup${when} mit ${days} ${days === 1 ? "Tag" : "Tagen"}. Deine aktuellen Daten auf diesem Gerät werden dadurch ersetzt.`,
-    ok: "Importieren",
-    action: () => {
-      try {
-        for (const k of allDataKeys()) localStorage.removeItem(k);
-        for (const k of keys) localStorage.setItem(k, data[k]);
-      } catch {}
-      location.reload();
-    }
-  });
+  $("importText").textContent = `Backup${when} mit ${days} ${days === 1 ? "Tag" : "Tagen"} und ${foodsText}. `
+    + "Lebensmittel und Rezepte werden zu deinen bestehenden hinzugefügt. «Alle Daten» ersetzt alles auf diesem Gerät.";
+  $("importFoods").disabled = !foodKeys.length;
+  $("importFoods").onclick = () => { closeImport(); importFoods(); };
+  $("importAll").onclick = () => {
+    closeImport();
+    openConfirm({ title: "Alle Daten ersetzen?", text: "Deine aktuellen Daten auf diesem Gerät werden durch das Backup ersetzt. Das lässt sich nicht rückgängig machen.",
+                  ok: "Ersetzen", action: importAll });
+  };
+  $("importSheet").hidden = false; document.body.classList.add("sheet-open"); $("importFoods").focus();
 });
+function closeImport() {
+  $("importSheet").hidden = true;
+  if (!document.querySelector(".sheet-backdrop:not([hidden])")) document.body.classList.remove("sheet-open");
+}
+$("importCancel").addEventListener("click", closeImport);
+$("importSheet").addEventListener("click", e => { if (e.target === $("importSheet")) closeImport(); });
 
 render();
 </script>
