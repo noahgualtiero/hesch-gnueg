@@ -158,7 +158,7 @@
   .favbtn { width: 40px; height: 40px; margin: 0; padding: 0; border-radius: 50%; background: var(--soft); color: var(--muted);
             font-size: 22px; line-height: 1; flex-shrink: 0; }
   .favbtn[aria-pressed="true"] { color: #FFCC00; background: rgba(255, 204, 0, .16); }
-  .newfood { display: block; margin-top: 14px; }
+  .linkbtn.newfood { display: block; margin: 22px auto 0; font-size: 13px; color: var(--muted); text-align: center; }
   .create-mode { margin: 0 0 4px; }
   .ing-rows:empty { display: none; }
   .ing-rows { background: var(--field); border-radius: 12px; padding: 0 12px; margin: 4px 0 8px; }
@@ -534,11 +534,11 @@
         </div>
         <div id="foodList" class="combo-list" role="listbox" hidden></div>
       </div>
-      <button class="linkbtn newfood" id="newFoodBtn">+ Eigenes Lebensmittel oder Rezept erstellen</button>
       <div id="recipeSection">
         <label>Rezept</label>
         <button class="secondary recipe-btn" id="recipeBtn">Rezept per Link oder Screenshot</button>
       </div>
+      <button class="linkbtn newfood" id="newFoodBtn">Eigenes Lebensmittel oder Rezept erstellen</button>
       <div id="status" class="status"></div>
       <div id="reader"></div>
     </div>
@@ -920,26 +920,34 @@ function searchSND(q, limit = 25) {
     if (/\broh\b/.test(n)) score -= 0.3;
     hits.push([score + n.length / 1000, row]);
   });
-  return hits.sort((a, b) => a[0] - b[0]).slice(0, limit).map(([, [name, , kcal, protein, carbs, fat]]) =>
+  // Treffer am Wortanfang bevorzugen; nur wenn es keine gibt, auch Treffer mitten im Wort
+  const good = hits.filter(h => h[0] < 1.9);
+  return (good.length ? good : hits).sort((a, b) => a[0] - b[0]).slice(0, limit).map(([, [name, , kcal, protein, carbs, fat]]) =>
     ({ key: "snd:" + name, name, img: "", kcal, protein, carbs, fat }));
 }
+// Reihenfolge immer: Favoriten → eigene → Nährwerttabelle → Produkte; innerhalb der Gruppe alphabetisch
+const abc = (a, b) => a.label.localeCompare(b.label, "de", { sensitivity: "base" });
 function foodGroups(q = "") {
+  const match = it => !q || norm(it.label).includes(q);
   const groups = [];
-  if (favs.length) groups.push(["★ Favoriten", favs.map(f => ({ label: f.name, food: f, portion: f.portion, pick: () => showProduct(f, f.portion) }))]);
-  const recent = used.filter(u => !favs.some(f => f.key === u.key));
-  if (recent.length) groups.push(["Zuletzt verwendet", recent.map(u => ({ label: u.name, food: u, portion: u.portion, pick: () => showProduct(u, u.portion) }))]);
-  if (customs.length) groups.push(["Eigene Lebensmittel", customs.map(c => ({ label: c.name, food: customProduct(c), portion: c.portion, pick: () => showProduct(customProduct(c), c.portion) }))]);
-  for (const [group, foods] of Object.entries(BASICS)) {
-    groups.push([group, Object.entries(foods).map(([name, [kcal, protein, carbs, fat, portion]]) => ({
-      label: name, food: { key: "basic:" + name, name, img: "", kcal, protein, carbs, fat }, portion,
-      pick: () => { showProduct({ key: "basic:" + name, name, img: "", kcal, protein, carbs, fat }, portion); setStatus("Richtwerte für " + name + " geladen."); }
-    }))]);
+  const add = (title, items) => { items = items.filter(match).sort(abc); if (items.length) groups.push([title, items]); };
+  add("★ Favoriten", favs.map(f => ({ label: f.name, food: f, portion: f.portion, pick: () => showProduct(f, f.portion) })));
+  add("Eigene Lebensmittel und Rezepte", customs.map(c => ({ label: c.name, food: customProduct(c), portion: c.portion,
+    pick: () => showProduct(customProduct(c), c.portion) })));
+  // Nährwerttabelle: eingebaute Richtwerte plus Schweizer Nährwertdatenbank (beim Tippen), ohne Doppelte
+  const table = [];
+  for (const foods of Object.values(BASICS)) for (const [name, [kcal, protein, carbs, fat, portion]] of Object.entries(foods)) {
+    const food = { key: "basic:" + name, name, img: "", kcal, protein, carbs, fat };
+    table.push({ label: name, food, portion, pick: () => { showProduct(food, portion); setStatus("Richtwerte für " + name + " geladen."); } });
   }
-  const snd = searchSND(q);
-  if (snd.length) groups.push(["Schweizer Nährwertdatenbank", snd.map(p => ({
-    label: p.name, food: p, portion: 100, prefiltered: true,
-    pick: () => { showProduct(p, 100); setStatus(SND_NOTE); }
-  }))]);
+  const favNames = new Set(favs.map(f => norm(f.name)));
+  const names = new Set([...table.filter(match).map(t => norm(t.label)), ...favNames]);
+  for (const p of searchSND(q, 40)) if (!names.has(norm(p.name)))
+    table.push({ label: p.name, food: p, portion: 100, snd: true, pick: () => { showProduct(p, 100); setStatus(SND_NOTE); } });
+  groups.push(["Nährwerttabelle", table.filter(t => t.snd || (match(t) && !favNames.has(norm(t.label)))).sort(abc)]);
+  if (!groups[groups.length - 1][1].length) groups.pop();
+  add("Produkte · zuletzt verwendet", used.filter(u => !favs.some(f => f.key === u.key))
+    .map(u => ({ label: u.name, food: u, portion: u.portion, pick: () => showProduct(u, u.portion) })));
   return groups;
 }
 let comboItems = [], comboActive = -1;
@@ -948,7 +956,7 @@ function renderFoodList() {
   comboItems = [];
   let html = "";
   for (const [group, items] of foodGroups(q)) {
-    const hits = q ? items.filter(it => it.prefiltered || norm(it.label).includes(q)) : items;
+    const hits = items;
     if (!hits.length) continue;
     html += `<div class="combo-group">${esc(group)}</div>`;
     for (const it of hits) {
@@ -972,7 +980,7 @@ function renderFoodList() {
           comboItems.push({ label: p.name, pick: () => { showProduct(p, p.portion); setStatus(note); } });
         }
       };
-      addGroup("Online · Open Food Facts", o.products, "Werte aus Open Food Facts.");
+      addGroup("Produkte · Open Food Facts", [...o.products].sort((a, b) => a.name.localeCompare(b.name, "de", { sensitivity: "base" })), "Werte aus Open Food Facts.");
       if (!o.products.length && !comboItems.length)
         html += '<div class="combo-empty">Online nichts gefunden.</div>';
     }
@@ -1288,7 +1296,7 @@ $("ingRows").addEventListener("click", e => {
   renderIngredients();
 });
 $("cServings").addEventListener("input", updateRecipeSum);
-const it0 = group => group === "Schweizer Nährwertdatenbank" ? 15 : 8;
+const it0 = group => group === "Nährwerttabelle" ? 40 : 8;
 function renderIngList() {
   const raw = $("ingSearch").value.trim(), q = norm(raw);
   ingItems = [];
@@ -1300,7 +1308,7 @@ function renderIngList() {
   };
   const seen = new Set();
   for (const [group, items] of foodGroups(q)) {
-    const hits = items.filter(it => (it.prefiltered || norm(it.label).includes(q)) && !seen.has(it.label)).slice(0, it0(group));
+    const hits = items.filter(it => !seen.has(it.label)).slice(0, it0(group));
     if (!hits.length) continue;
     html += `<div class="combo-group">${esc(group)}</div>`;
     for (const it of hits) { seen.add(it.label); add(it.label, it.food, it.portion); }
@@ -1309,8 +1317,8 @@ function renderIngList() {
     const o = onlineCache.get(q);
     if (!o || o.status === "loading") html += '<div class="combo-empty combo-loading">Suche online …</div>';
     else if (o.status === "done" && o.products.length) {
-      html += '<div class="combo-group">Online · Open Food Facts</div>';
-      for (const p of o.products.slice(0, 10)) add(p.name, p, p.portion, `${r(p.kcal)} kcal · P ${r(p.protein)} pro 100 g`);
+      html += '<div class="combo-group">Produkte · Open Food Facts</div>';
+      for (const p of [...o.products].sort((a, b) => a.name.localeCompare(b.name, "de", { sensitivity: "base" })).slice(0, 10)) add(p.name, p, p.portion, `${r(p.kcal)} kcal · P ${r(p.protein)} pro 100 g`);
     }
   }
   $("ingList").innerHTML = html || '<div class="combo-empty">Nichts gefunden.</div>';
