@@ -159,6 +159,20 @@
             font-size: 22px; line-height: 1; flex-shrink: 0; }
   .favbtn[aria-pressed="true"] { color: #FFCC00; background: rgba(255, 204, 0, .16); }
   .newfood { display: block; margin-top: 14px; }
+  .create-mode { margin: 0 0 4px; }
+  .ing-rows:empty { display: none; }
+  .ing-rows { background: var(--field); border-radius: 12px; padding: 0 12px; margin: 4px 0 8px; }
+  .ing-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-top: .5px solid var(--line); }
+  .ing-row:first-child { border-top: 0; }
+  .ing-row .ing-name { flex: 1; min-width: 0; font-size: 16px; }
+  .ing-row .ing-name small { display: block; color: var(--muted); font-size: 12px; margin-top: 1px; }
+  .ing-row input { flex: 0 0 76px; width: 76px; margin: 0; text-align: right; padding: 6px 8px; background: var(--card); }
+  .ing-row .ing-unit { color: var(--muted); font-size: 15px; }
+  .ing-row button { flex: 0 0 auto; width: auto; margin: 0; padding: 4px 6px; background: none; color: var(--muted); font-size: 20px; }
+  .ing-weight { padding: 10px 0; font-size: 17px; }
+  .ing-sum { font-size: 15px; line-height: 1.5; margin: 10px 0 0; }
+  .ing-sum small { display: block; color: var(--muted); font-size: 13px; }
+  .tag { font-size: 11px; font-weight: 600; color: var(--muted); background: var(--soft); border-radius: 5px; padding: 1px 5px; margin-left: 6px; vertical-align: 2px; }
   .custom-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-top: .5px solid var(--line); font-size: 17px; }
   .custom-row:first-child { border-top: 0; }
   .custom-row span { flex: 1; min-width: 0; }
@@ -519,7 +533,7 @@
         </div>
         <div id="foodList" class="combo-list" role="listbox" hidden></div>
       </div>
-      <button class="linkbtn newfood" id="newFoodBtn">+ Eigenes Lebensmittel erstellen</button>
+      <button class="linkbtn newfood" id="newFoodBtn">+ Eigenes Lebensmittel oder Rezept erstellen</button>
       <div id="recipeSection">
         <label>Rezept</label>
         <button class="secondary recipe-btn" id="recipeBtn">Rezept per Link oder Screenshot</button>
@@ -591,8 +605,13 @@
     </div>
   <div id="createStep" hidden>
       <button class="linkbtn" id="createBack" hidden>‹ Zurück</button>
+      <div class="segmented create-mode" id="createMode" role="group" aria-label="Art">
+        <button data-mode="food" aria-pressed="true">Lebensmittel</button>
+        <button data-mode="recipe" aria-pressed="false">Rezept</button>
+      </div>
       <label for="cName">Name</label>
       <input type="text" id="cName" placeholder="z. B. Mein Proteinshake" maxlength="60">
+      <div id="cFoodFields">
       <div class="row">
         <div><label for="cBasis">Werte gelten für</label>
           <select id="cBasis"><option value="100">100 g</option><option value="portion">1 Portion</option></select></div>
@@ -605,6 +624,20 @@
       <div class="row">
         <div><label for="cCarbs">Kohlenhydrate (g)</label><input type="number" id="cCarbs" min="0" step="0.1"></div>
         <div><label for="cFat">Fett (g)</label><input type="number" id="cFat" min="0" step="0.1"></div>
+      </div>
+      </div>
+      <div id="cRecipeFields" hidden>
+        <label for="ingSearch">Zutaten</label>
+        <div id="ingRows" class="ing-rows"></div>
+        <div class="combo">
+          <input type="text" id="ingSearch" enterkeyhint="search" autocomplete="off" placeholder="Zutat suchen, z. B. Reis, Poulet …">
+          <div id="ingList" class="combo-list" hidden></div>
+        </div>
+        <div class="row">
+          <div><label for="cServings">Anzahl Portionen</label><input type="number" id="cServings" min="1" step="1" value="1"></div>
+          <div><label>Gesamtgewicht</label><div class="ing-weight" id="ingWeight">0 g</div></div>
+        </div>
+        <div class="ing-sum" id="ingSum"></div>
       </div>
       <div id="createStatus" class="status"></div>
       <button id="createSave">Speichern und weiter</button>
@@ -872,13 +905,13 @@ const customProduct = c => ({ key: "custom:" + c.id, name: c.name, img: "", kcal
 const norm = s => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 function foodGroups() {
   const groups = [];
-  if (favs.length) groups.push(["★ Favoriten", favs.map(f => ({ label: f.name, pick: () => showProduct(f, f.portion) }))]);
+  if (favs.length) groups.push(["★ Favoriten", favs.map(f => ({ label: f.name, food: f, portion: f.portion, pick: () => showProduct(f, f.portion) }))]);
   const recent = used.filter(u => !favs.some(f => f.key === u.key));
-  if (recent.length) groups.push(["Zuletzt verwendet", recent.map(u => ({ label: u.name, pick: () => showProduct(u, u.portion) }))]);
-  if (customs.length) groups.push(["Eigene Lebensmittel", customs.map(c => ({ label: c.name, pick: () => showProduct(customProduct(c), c.portion) }))]);
+  if (recent.length) groups.push(["Zuletzt verwendet", recent.map(u => ({ label: u.name, food: u, portion: u.portion, pick: () => showProduct(u, u.portion) }))]);
+  if (customs.length) groups.push(["Eigene Lebensmittel", customs.map(c => ({ label: c.name, food: customProduct(c), portion: c.portion, pick: () => showProduct(customProduct(c), c.portion) }))]);
   for (const [group, foods] of Object.entries(BASICS)) {
     groups.push([group, Object.entries(foods).map(([name, [kcal, protein, carbs, fat, portion]]) => ({
-      label: name,
+      label: name, food: { key: "basic:" + name, name, img: "", kcal, protein, carbs, fat }, portion,
       pick: () => { showProduct({ key: "basic:" + name, name, img: "", kcal, protein, carbs, fat }, portion); setStatus("Richtwerte für " + name + " geladen."); }
     }))]);
   }
@@ -1166,7 +1199,7 @@ renderFavs();
 // Eigenes Lebensmittel erstellen und verwalten
 function renderCustomList() {
   $("customListWrap").hidden = !customs.length;
-  $("customList").innerHTML = customs.map(c => `<div class="custom-row"><span>${esc(c.name)}
+  $("customList").innerHTML = customs.map(c => `<div class="custom-row"><span>${esc(c.name)}${c.ingredients ? '<span class="tag">Rezept</span>' : ""}
       <small>pro 100 g: ${r(c.kcal)} kcal · P ${r(c.protein)} · K ${r(c.carbs)} · F ${r(c.fat)} · Portion ${r(c.portion)} g</small></span>
       <button data-id="${c.id}" aria-label="${esc(c.name)} löschen">×</button></div>`).join("");
 }
@@ -1178,17 +1211,130 @@ $("customList").addEventListener("click", e => {
   writeList(CUSTOM_KEY, customs); writeList(FAV_KEY, favs);
   buildSelect(); renderFavs(); renderCustomList();
 });
-$("newFoodBtn").addEventListener("click", () => {
-  for (const id of ["cName", "cKcal", "cProtein", "cCarbs", "cFat"]) $(id).value = "";
-  $("cBasis").value = "100"; $("cPortion").value = 100;
+// Rezept selbst zusammenstellen: Zutaten mit Gramm, Werte werden summiert und pro Portion gerechnet
+let ingredients = [], createMode = "food", ingItems = [];
+function setCreateMode(mode) {
+  createMode = mode;
+  $("createMode").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b.dataset.mode === mode));
+  $("cFoodFields").hidden = mode !== "food";
+  $("cRecipeFields").hidden = mode !== "recipe";
+  $("cName").placeholder = mode === "recipe" ? "z. B. Poulet-Curry mit Reis" : "z. B. Mein Proteinshake";
   $("createStatus").textContent = "";
-  renderCustomList();
   showStep("create");
+}
+$("createMode").addEventListener("click", e => { const b = e.target.closest("button[data-mode]"); if (b) setCreateMode(b.dataset.mode); });
+function recipeTotals() {
+  const t = { grams: 0, kcal: 0, protein: 0, carbs: 0, fat: 0 };
+  for (const i of ingredients) {
+    const f = (i.grams || 0) / 100;
+    t.grams += i.grams || 0;
+    for (const k of ["kcal", "protein", "carbs", "fat"]) t[k] += i[k] * f;
+  }
+  return t;
+}
+function renderIngredients() {
+  $("ingRows").innerHTML = ingredients.map((i, n) => `<div class="ing-row">
+      <span class="ing-name">${esc(i.name)}<small>${r(i.kcal * (i.grams || 0) / 100)} kcal · P ${r(i.protein * (i.grams || 0) / 100)} g</small></span>
+      <input type="text" inputmode="decimal" data-n="${n}" value="${i.grams || ""}" aria-label="Gramm ${esc(i.name)}"><span class="ing-unit">g</span>
+      <button data-del="${n}" aria-label="${esc(i.name)} entfernen">×</button></div>`).join("");
+  updateRecipeSum();
+}
+function updateRecipeSum() {
+  const t = recipeTotals(), n = Math.max(1, parseFloat(String($("cServings").value).replace(",", ".")) || 1);
+  $("ingWeight").textContent = r(t.grams) + " g";
+  $("ingSum").innerHTML = ingredients.length && t.grams
+    ? `<b>Pro Portion (${r(t.grams / n)} g):</b> ${r(t.kcal / n)} kcal · Protein ${r(t.protein / n)} g · Kohlenhydrate ${r(t.carbs / n)} g · Fett ${r(t.fat / n)} g
+       <small>Ganzes Rezept: ${r(t.kcal)} kcal · Protein ${r(t.protein)} g</small>`
+    : "";
+}
+$("ingRows").addEventListener("input", e => {
+  const inp = e.target.closest("input[data-n]");
+  if (!inp) return;
+  const i = ingredients[+inp.dataset.n];
+  i.grams = parseFloat(inp.value.replace(",", ".")) || 0;
+  inp.previousElementSibling.querySelector("small").textContent = `${r(i.kcal * i.grams / 100)} kcal · P ${r(i.protein * i.grams / 100)} g`;
+  updateRecipeSum();
+});
+$("ingRows").addEventListener("click", e => {
+  const b = e.target.closest("button[data-del]");
+  if (!b) return;
+  ingredients.splice(+b.dataset.del, 1);
+  renderIngredients();
+});
+$("cServings").addEventListener("input", updateRecipeSum);
+function renderIngList() {
+  const raw = $("ingSearch").value.trim(), q = norm(raw);
+  ingItems = [];
+  let html = "";
+  if (!q) { $("ingList").hidden = true; return; }
+  const add = (label, p, portion, meta) => {
+    html += `<div class="combo-item" data-i="${ingItems.length}">${esc(label)}${meta ? `<small class="combo-meta">${meta}</small>` : ""}</div>`;
+    ingItems.push({ p, portion });
+  };
+  const seen = new Set();
+  for (const [group, items] of foodGroups()) {
+    const hits = items.filter(it => norm(it.label).includes(q) && !seen.has(it.label)).slice(0, 8);
+    if (!hits.length) continue;
+    html += `<div class="combo-group">${esc(group)}</div>`;
+    for (const it of hits) { seen.add(it.label); add(it.label, it.food, it.portion); }
+  }
+  if (raw.length >= 3) {
+    const o = onlineCache.get(q);
+    if (!o || o.status === "loading") html += '<div class="combo-empty combo-loading">Suche online …</div>';
+    else if (o.status === "done" && o.products.length) {
+      html += '<div class="combo-group">Online · Open Food Facts</div>';
+      for (const p of o.products.slice(0, 10)) add(p.name, p, p.portion, `${r(p.kcal)} kcal · P ${r(p.protein)} pro 100 g`);
+    }
+  }
+  $("ingList").innerHTML = html || '<div class="combo-empty">Nichts gefunden.</div>';
+  $("ingList").hidden = false;
+}
+let ingTimer = null;
+$("ingSearch").addEventListener("input", () => {
+  renderIngList();
+  clearTimeout(ingTimer);
+  const raw = $("ingSearch").value.trim();
+  if (raw.length >= 3 && !onlineCache.has(norm(raw))) ingTimer = setTimeout(async () => { await fetchOnline(raw); renderIngList(); }, 600);
+});
+$("ingSearch").addEventListener("focus", () => setTimeout(() => $("ingSearch").scrollIntoView({ block: "start", behavior: "smooth" }), 300));
+$("ingList").addEventListener("pointerdown", e => e.preventDefault()); // Tastatur offen lassen
+$("ingList").addEventListener("click", e => {
+  const el = e.target.closest(".combo-item");
+  if (!el) return;
+  const { p, portion } = ingItems[+el.dataset.i];
+  ingredients.push({ name: p.name, grams: Math.round(portion || 100), kcal: p.kcal, protein: p.protein, carbs: p.carbs, fat: p.fat });
+  $("ingSearch").value = "";
+  $("ingList").hidden = true;
+  renderIngredients();
+  const inputs = $("ingRows").querySelectorAll("input");
+  inputs[inputs.length - 1].select();
+});
+$("newFoodBtn").addEventListener("click", () => {
+  for (const id of ["cName", "cKcal", "cProtein", "cCarbs", "cFat", "ingSearch"]) $(id).value = "";
+  $("cBasis").value = "100"; $("cPortion").value = 100; $("cServings").value = 1;
+  ingredients = []; renderIngredients(); $("ingList").hidden = true;
+  renderCustomList();
+  setCreateMode("food");
   $("cName").focus();
 });
 $("createBack").addEventListener("click", () => showStep("capture"));
 $("createSave").addEventListener("click", () => {
   const name = $("cName").value.trim();
+  if (createMode === "recipe") {
+    const t = recipeTotals(), n = Math.max(1, parseFloat(String($("cServings").value).replace(",", ".")) || 1);
+    if (!name) { $("createStatus").textContent = "Bitte einen Namen eingeben."; return; }
+    if (!ingredients.length || !t.grams) { $("createStatus").textContent = "Bitte mindestens eine Zutat mit Menge hinzufügen."; return; }
+    const f = 100 / t.grams, portion = Math.round(t.grams / n);
+    const c = { id: String(Date.now()), name, portion, servings: n,
+                kcal: t.kcal * f, protein: t.protein * f, carbs: t.carbs * f, fat: t.fat * f,
+                ingredients: ingredients.map(i => ({ ...i })) };
+    customs.push(c);
+    writeList(CUSTOM_KEY, customs);
+    buildSelect();
+    showProduct(customProduct(c), portion);
+    setStatus(`Rezept „${name}“ gespeichert. 1 Portion = ${portion} g.`);
+    return;
+  }
   const portion = parseFloat($("cPortion").value) || 100;
   const vals = ["cKcal", "cProtein", "cCarbs", "cFat"].map(id => parseFloat($(id).value) || 0);
   if (!name) { $("createStatus").textContent = "Bitte einen Namen eingeben."; return; }
@@ -1283,7 +1429,7 @@ function showStep(step) {
   $("recipeStep").hidden = step !== "recipe";
   $("headBack").hidden = step === "capture";
   const dayName = new Date(day + "T12:00:00").toLocaleDateString("de-CH", { day: "numeric", month: "short" });
-  $("sheetTitle").textContent = step === "create" ? "Neues Lebensmittel" : step === "recipe" ? "Rezept"
+  $("sheetTitle").textContent = step === "create" ? (createMode === "recipe" ? "Neues Rezept" : "Neues Lebensmittel") : step === "recipe" ? "Rezept"
     : day !== todayStr() ? "Nachtragen " + dayName : "Hinzufügen";
 }
 function openSheet() {
