@@ -99,6 +99,8 @@
   .combo-item:hover, .combo-item.active { background: var(--soft); box-shadow: none; }
   .combo-empty { padding: 14px 16px; color: var(--muted); font-size: 15px; }
   .combo-online { color: var(--accent); font-weight: 500; }
+  .combo-meta { display: block; font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .combo-loading { font-style: normal; }
   .online { margin-top: 12px; border-radius: 12px; background: var(--card); box-shadow: 0 0 0 .5px var(--line); overflow: hidden; }
   .online-head { font-size: 13px; color: var(--muted); padding: 10px 16px 6px; }
   .online-item { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; margin: 0; padding: 11px 16px;
@@ -431,7 +433,6 @@
                role="combobox" aria-expanded="false" aria-controls="foodList" aria-autocomplete="list">
         <div id="foodList" class="combo-list" role="listbox" hidden></div>
       </div>
-      <div id="onlineResults" class="online" hidden></div>
       <button class="linkbtn newfood" id="newFoodBtn">+ Eigenes Lebensmittel erstellen</button>
       <div id="status" class="status"></div>
       <div id="reader"></div>
@@ -764,11 +765,32 @@ function renderFoodList() {
     }
   }
   const raw = $("foodSearch").value.trim();
-  if (raw.length >= 2) {
-    if (!comboItems.length) html += '<div class="combo-empty">In deiner Liste nicht gefunden.</div>';
-    html += `<div class="combo-item combo-online" role="option" id="opt${comboItems.length}" data-i="${comboItems.length}">Online suchen nach „${esc(raw)}“</div>`;
-    comboItems.push({ label: raw, pick: () => onlineSearch(raw) });
+  // Online-Treffer direkt in der Liste (lädt automatisch nach kurzer Tipp-Pause)
+  if (raw.length >= 3) {
+    const o = onlineCache.get(norm(raw));
+    if (!o || o.status === "loading") html += '<div class="combo-empty combo-loading">Suche online …</div>';
+    else if (o.status === "error") html += '<div class="combo-empty">Online-Suche gerade nicht erreichbar.</div>';
+    else {
+      const addGroup = (label, list, note) => {
+        if (!list.length) return;
+        html += `<div class="combo-group">${label}</div>`;
+        for (const p of list) {
+          html += `<div class="combo-item" role="option" id="opt${comboItems.length}" data-i="${comboItems.length}">${esc(p.name)}
+            <small class="combo-meta">${r(p.kcal)} kcal · P ${r(p.protein)} · K ${r(p.carbs)} · F ${r(p.fat)} pro 100 g</small></div>`;
+          comboItems.push({ label: p.name, pick: () => { showProduct(p, p.portion); setStatus(note); } });
+        }
+      };
+      addGroup("Online · Gerichte (USDA, englisch)", o.dishes, "Richtwerte aus USDA FoodData Central.");
+      addGroup("Online · Produkte (Open Food Facts)", o.products, "Werte aus Open Food Facts.");
+      if (!o.dishes.length && !o.products.length && !comboItems.length)
+        html += '<div class="combo-empty">Nichts gefunden. Gerichte findest du oft mit dem englischen Namen, z. B. „chicken curry“.</div>';
+    }
   }
+  if (raw.length >= 2) {
+    html += `<div class="combo-item combo-online" role="option" id="opt${comboItems.length}" data-i="${comboItems.length}">„${esc(raw)}“ selbst eingeben</div>`;
+    comboItems.push({ label: raw, pick: () => { $("newFoodBtn").click(); $("cName").value = raw; $("cKcal").focus(); } });
+  }
+  $("newFoodBtn").hidden = raw.length >= 2;
   $("foodList").innerHTML = html || '<div class="combo-empty">Tippe, um zu suchen.</div>';
   comboActive = q && comboItems.length ? 0 : -1;
   markActive();
@@ -791,7 +813,13 @@ function pickFood(i) {
 }
 function buildSelect() { if (!$("foodList").hidden) renderFoodList(); }
 $("foodSearch").addEventListener("focus", openFoodList);
-$("foodSearch").addEventListener("input", openFoodList);
+let onlineTimer = null;
+$("foodSearch").addEventListener("input", () => {
+  openFoodList();
+  clearTimeout(onlineTimer);
+  const raw = $("foodSearch").value.trim();
+  if (raw.length >= 3 && !onlineCache.has(norm(raw))) onlineTimer = setTimeout(() => fetchOnline(raw), 600);
+});
 $("foodSearch").addEventListener("blur", () => { comboBlurTimer = setTimeout(closeFoodList, 150); });
 $("foodSearch").addEventListener("keydown", e => {
   if ($("foodList").hidden && e.key !== "Escape") openFoodList();
@@ -808,7 +836,6 @@ $("foodList").addEventListener("click", e => {
 
 // Online-Suche: Gerichte (USDA FoodData Central) und Produkte (Open Food Facts)
 const USDA_KEY = "DEMO_KEY"; // öffentlicher Demo-Schlüssel, reicht für den persönlichen Gebrauch
-let onlineHits = [];
 
 async function searchUSDA(q) {
   const url = "https://api.nal.usda.gov/fdc/v1/foods/search?api_key=" + USDA_KEY +
@@ -855,36 +882,19 @@ async function searchOFF(q) {
   }).filter(p => p.kcal > 0 && p.name);
 }
 
-async function onlineSearch(q) {
-  const box = $("onlineResults");
-  box.hidden = false;
-  $("newFoodBtn").hidden = true; // "Nicht dabei? … selbst eingeben" steht in den Ergebnissen
-  box.innerHTML = `<div class="online-head">Suche online nach „${esc(q)}“ …</div>`;
+const onlineCache = new Map(); // Suchbegriff -> Ergebnis, spart Anfragen
+async function fetchOnline(q) {
+  const key = norm(q);
+  if (onlineCache.has(key)) return;
+  onlineCache.set(key, { status: "loading" });
   const [usda, off] = await Promise.allSettled([searchUSDA(q), searchOFF(q)]);
-  const dishes = usda.status === "fulfilled" ? usda.value : [];
-  const products = off.status === "fulfilled" ? off.value : [];
-  onlineHits = [...dishes, ...products];
-  const failed = usda.status === "rejected" && off.status === "rejected";
-  const row = (p, i) => `<button class="online-item" data-i="${i}">
-      <span class="oi-name">${esc(p.name)}</span>
-      <span class="oi-meta">${r(p.kcal)} kcal · P ${r(p.protein)} · K ${r(p.carbs)} · F ${r(p.fat)} pro 100 g</span></button>`;
-  let html = `<div class="online-head">Online-Ergebnisse für „${esc(q)}“</div>`;
-  if (failed) html += `<p class="online-empty">Die Online-Suche ist gerade nicht erreichbar. Prüfe die Internetverbindung oder gib die Werte selbst ein.</p>`;
-  else if (!onlineHits.length) html += `<p class="online-empty">Online nichts gefunden. Tipp: Gerichte findest du oft mit dem englischen Namen, z. B. „chicken curry“.</p>`;
-  if (dishes.length) html += `<div class="combo-group">Gerichte und Rezepte (USDA, englisch)</div>` + dishes.map((p, i) => row(p, i)).join("");
-  if (products.length) html += `<div class="combo-group">Produkte (Open Food Facts)</div>` + products.map((p, i) => row(p, dishes.length + i)).join("");
-  html += `<button class="linkbtn online-own" id="onlineOwn">Nicht dabei? „${esc(q)}“ selbst eingeben</button>`;
-  box.innerHTML = html;
-  $("onlineOwn").addEventListener("click", () => { $("newFoodBtn").click(); $("cName").value = q; $("cKcal").focus(); });
+  if (usda.status === "rejected" && off.status === "rejected") onlineCache.delete(key), onlineCache.set(key, { status: "error" });
+  else onlineCache.set(key, { status: "done",
+    dishes: usda.status === "fulfilled" ? usda.value : [], products: off.status === "fulfilled" ? off.value : [] });
+  // nur neu zeichnen, wenn der Begriff noch im Suchfeld steht
+  if (!$("foodList").hidden && norm($("foodSearch").value.trim()) === key) renderFoodList();
+  if (onlineCache.get(key).status === "error") setTimeout(() => { if (onlineCache.get(key)?.status === "error") onlineCache.delete(key); }, 15000);
 }
-$("onlineResults").addEventListener("click", e => {
-  const b = e.target.closest(".online-item");
-  if (!b) return;
-  const p = onlineHits[+b.dataset.i];
-  if (!p) return;
-  showProduct(p, p.portion);
-  setStatus(p.source === "usda" ? "Richtwerte aus USDA FoodData Central." : "Werte aus Open Food Facts.");
-});
 
 // Favoriten: Stern beim Produkt, erscheinen zuoberst im Auswahlfeld
 function renderFavs() { buildSelect(); }
@@ -1027,7 +1037,6 @@ function showStep(step) {
 }
 function openSheet() {
   current = null;
-  $("onlineResults").hidden = true; $("onlineResults").innerHTML = "";
   $("manualWrap").hidden = true;
   $("newFoodBtn").hidden = false;
   $("manual").value = "";
