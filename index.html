@@ -837,6 +837,7 @@ function openFoodList() {
   const entering = !$("sheet").classList.contains("searching");
   $("sheet").classList.add("searching");
   if (entering) {
+    setStatusBar(true);
     // von iOS verschobenen Ausschnitt und Popup-Scroll zurücksetzen, damit Suchfeld und Liste oben sichtbar sind
     const reset = () => { window.scrollTo(0, 0); $("sheet").querySelector(".sheet").scrollTop = 0; fitFoodList(); };
     reset(); requestAnimationFrame(reset); setTimeout(reset, 120); setTimeout(reset, 400);
@@ -847,7 +848,13 @@ function openFoodList() {
   fitFoodList();
   setTimeout(fitFoodList, 350); // nach dem Einblenden der Tastatur nochmals messen
 }
-function closeFoodList() { $("foodList").hidden = true; $("foodSearch").setAttribute("aria-expanded", "false"); $("sheet").classList.remove("searching"); fitFoodList(); }
+function closeFoodList() { $("foodList").hidden = true; $("foodSearch").setAttribute("aria-expanded", "false"); $("sheet").classList.remove("searching"); fitFoodList(); setStatusBar(false); }
+// Statusleiste (Homescreen-App) während der Vollbild-Suche in der Farbe der Suchseite
+const themeMetas = [...document.querySelectorAll('meta[name="theme-color"]')].map(m => [m, m.content]);
+function setStatusBar(search) {
+  const color = search ? getComputedStyle($("sheet").querySelector(".sheet")).backgroundColor : null;
+  for (const [m, orig] of themeMetas) m.content = color || orig;
+}
 // Suche am sichtbaren Bereich ausrichten: iOS verschiebt beim Tippen den sichtbaren Ausschnitt.
 // Wo der Browser die Tastatur meldet, liegt die Suche genau zwischen Oberkante und Tastatur;
 // sonst (z. B. in der Claude-App) bleibt unten Scroll-Raum in geschätzter Tastaturhöhe.
