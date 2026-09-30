@@ -203,9 +203,12 @@
   .e-name { font-weight: 400; font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .e-meta { font-size: 13px; color: var(--muted); margin-top: 2px; font-variant-numeric: tabular-nums; }
   .e-side { text-align: right; flex-shrink: 0; }
-  .e-side .dens { font-size: 12px; color: var(--muted); margin-top: 2px; }
-  .e-side .dens.good { color: var(--good); }
-  .e-side .dens.bad { color: var(--danger); }
+  .e-side .dens { font-size: 12px; color: var(--muted); margin-top: 2px; font-weight: 400; }
+  .e-side .dens::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+                          background: var(--faint); margin-right: 5px; vertical-align: 1px; }
+  .e-side .dens.good, .e-side .dens.bad { color: var(--muted); font-weight: 400; }
+  .e-side .dens.good::before { background: var(--good); }
+  .e-side .dens.bad::before { background: var(--danger); }
   .e-kcal { font-weight: 400; font-size: 17px; color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .e-kcal.sport { color: var(--accent); }
   .entry[data-id] { cursor: pointer; }
