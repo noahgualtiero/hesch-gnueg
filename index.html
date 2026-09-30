@@ -1264,8 +1264,8 @@ function progress(label, value, target, unit, color, mustReach, extra = "") {
 
 // Protein-Dichte: Gramm Protein pro 100 kcal
 const density = e => e.kcal > 0 ? e.protein / e.kcal * 100 : 0;
-// Bewertung: ab 10 g sehr gut (grün), unter 3 g wenig (rot), dazwischen neutral
-const densClass = v => v >= 10 ? "good" : v < 3 ? "bad" : "";
+// Bewertung: ab 10 g sehr gut (grün), unter 4 g wenig (rot), dazwischen neutral
+const densClass = v => v >= 10 ? "good" : v < 4 ? "bad" : "";
 const fmtDensity = v => v.toLocaleString("de-CH", { maximumFractionDigits: 1 });
 let sortMode = "time";
 try { sortMode = localStorage.getItem("naehrwert-sortierung") || "time"; } catch {}
