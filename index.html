@@ -118,7 +118,7 @@
   .sheet-backdrop.searching .combo-list::after { content: ""; display: block; height: var(--kb, 45vh); }
   .sheet-backdrop.searching #status, .sheet-backdrop.searching #reader { display: none; }
   .sheet-backdrop.searching .sheet::before, .sheet-backdrop.searching .sheet-head,
-  .sheet-backdrop.searching #barcodeSection, .sheet-backdrop.searching #newFoodBtn,
+  .sheet-backdrop.searching #barcodeSection, .sheet-backdrop.searching #newFoodBtn, .sheet-backdrop.searching #searchLabel,
   .sheet-backdrop.searching #recipeSection { display: none; }
   .sheet-backdrop.searching #searchCancel { display: block; }
   .combo-list { margin-top: 8px; max-height: 280px; overflow-y: auto; border-radius: 12px; background: var(--card);
@@ -576,8 +576,17 @@
   <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
     <div class="sheet-head page-head"><button class="linkbtn head-back" id="headBack" hidden>‹ Zurück</button><h2 id="sheetTitle">Hinzufügen</h2><button class="secondary navbtn" id="closeSheet" aria-label="Schliessen">×</button></div>
   <div id="captureStep">
+      <label for="foodSearch" class="first-label" id="searchLabel">Suchen</label>
+      <div class="combo">
+        <div class="search-row">
+        <input type="text" id="foodSearch" enterkeyhint="search" placeholder="z. B. Banane, Reis, Proteinriegel …" autocomplete="off"
+               role="combobox" aria-expanded="false" aria-controls="foodList" aria-autocomplete="list">
+        <button class="linkbtn" id="searchCancel">Abbrechen</button>
+        </div>
+        <div id="foodList" class="combo-list" role="listbox" hidden></div>
+      </div>
       <div id="barcodeSection">
-      <label class="first-label">Mit Barcode</label>
+      <label>Mit Barcode</label>
       <div id="barcodeChoice" class="choice">
         <label class="choice-opt" id="uploadLabel">Foto oder Bild
           <small>Kamera, Fotos oder gespeichertes Bild</small>
@@ -590,15 +599,6 @@
         <input type="text" id="manual" inputmode="numeric" placeholder="z. B. 7610200337344" aria-label="Barcode-Nummer">
         <button class="secondary" id="lookupBtn" style="flex:0 0 auto;width:auto;margin-top:0">Suchen</button>
       </div>
-      <label for="foodSearch">Ohne Barcode</label>
-      </div>
-      <div class="combo">
-        <div class="search-row">
-        <input type="text" id="foodSearch" enterkeyhint="search" placeholder="z. B. Banane, Reis, Proteinriegel …" autocomplete="off"
-               role="combobox" aria-expanded="false" aria-controls="foodList" aria-autocomplete="list">
-        <button class="linkbtn" id="searchCancel">Abbrechen</button>
-        </div>
-        <div id="foodList" class="combo-list" role="listbox" hidden></div>
       </div>
       <div id="recipeSection">
         <label>Rezept</label>
@@ -1024,6 +1024,11 @@ function foodGroups(q = "") {
     table.push({ label: name, food, portion, pick: () => { showProduct(food, portion); setStatus("Richtwerte für " + name + " geladen."); } });
   }
   const favNames = new Set(favs.map(f => norm(f.name)));
+  if (!q) {
+    add("Produkte · zuletzt verwendet", used.filter(u => !favs.some(f => f.key === u.key))
+      .map(u => ({ label: u.name, food: u, portion: u.portion, pick: () => showProduct(u, u.portion) })));
+    return groups;
+  }
   const names = new Set([...table.filter(match).map(t => norm(t.label)), ...favNames]);
   for (const p of searchSND(q, 40)) if (!names.has(norm(p.name)))
     table.push({ label: p.name, food: p, portion: 100, snd: true, pick: () => { showProduct(p, 100); setStatus(SND_NOTE); } });
@@ -1073,7 +1078,7 @@ function renderFoodList() {
     comboItems.push({ label: raw, pick: () => { $("newFoodBtn").click(); $("cName").value = raw; $("cKcal").focus(); } });
   }
   $("newFoodBtn").hidden = raw.length >= 2;
-  $("foodList").innerHTML = html || '<div class="combo-empty">Tippe, um zu suchen.</div>';
+  $("foodList").innerHTML = html || `<div class="combo-empty">${raw ? "Nichts gefunden." : "Noch keine Favoriten. Tippe, um zu suchen."}</div>`;
   comboActive = q && comboItems.length ? 0 : -1;
   markActive();
   fitFoodList();
@@ -1139,10 +1144,9 @@ function pickFood(i) {
 }
 function buildSelect() { if (!$("foodList").hidden) renderFoodList(); }
 // Vollbild-Suche erst, wenn getippt wird (nicht schon beim Antippen)
-$("foodSearch").addEventListener("focus", () => { if ($("foodSearch").value.trim()) openFoodList(); });
+$("foodSearch").addEventListener("focus", () => openFoodList());
 let onlineTimer = null;
 $("foodSearch").addEventListener("input", () => {
-  if (!$("foodSearch").value.trim() && $("foodList").hidden) return;
   openFoodList();
   clearTimeout(onlineTimer);
   const raw = $("foodSearch").value.trim();
