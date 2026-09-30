@@ -834,20 +834,35 @@ function markActive() {
 let comboBlurTimer = null;
 function openFoodList() {
   clearTimeout(comboBlurTimer);
+  const entering = !$("sheet").classList.contains("searching");
   $("sheet").classList.add("searching");
+  if (entering) {
+    // von iOS verschobenen Ausschnitt und Popup-Scroll zurücksetzen, damit Suchfeld und Liste oben sichtbar sind
+    const reset = () => { window.scrollTo(0, 0); $("sheet").querySelector(".sheet").scrollTop = 0; fitFoodList(); };
+    reset(); requestAnimationFrame(reset); setTimeout(reset, 120); setTimeout(reset, 400);
+  }
   renderFoodList();
   $("foodList").hidden = false;
   $("foodSearch").setAttribute("aria-expanded", "true");
   fitFoodList();
   setTimeout(fitFoodList, 350); // nach dem Einblenden der Tastatur nochmals messen
 }
-function closeFoodList() { $("foodList").hidden = true; $("foodSearch").setAttribute("aria-expanded", "false"); $("sheet").classList.remove("searching"); }
-// Tastaturhöhe messen, wo der Browser sie meldet; sonst bleibt die Schätzung aus dem CSS (45 % der Höhe)
+function closeFoodList() { $("foodList").hidden = true; $("foodSearch").setAttribute("aria-expanded", "false"); $("sheet").classList.remove("searching"); fitFoodList(); }
+// Suche am sichtbaren Bereich ausrichten: iOS verschiebt beim Tippen den sichtbaren Ausschnitt.
+// Wo der Browser die Tastatur meldet, liegt die Suche genau zwischen Oberkante und Tastatur;
+// sonst (z. B. in der Claude-App) bleibt unten Scroll-Raum in geschätzter Tastaturhöhe.
 function fitFoodList() {
-  const vv = window.visualViewport;
-  if (!vv) return;
+  const bd = $("sheet"), vv = window.visualViewport;
+  if (!bd.classList.contains("searching") || !vv) {
+    bd.style.top = bd.style.height = bd.style.bottom = "";
+    $("foodList").style.removeProperty("--kb");
+    return;
+  }
   const kb = window.innerHeight - (vv.height + vv.offsetTop);
-  if (kb > 80) $("foodList").style.setProperty("--kb", (kb + 16) + "px");
+  bd.style.top = vv.offsetTop + "px";
+  bd.style.height = vv.height + "px";
+  bd.style.bottom = "auto";
+  if (kb > 80) $("foodList").style.setProperty("--kb", "16px");
   else $("foodList").style.removeProperty("--kb");
 }
 if (window.visualViewport) {
@@ -1076,6 +1091,7 @@ function openSheet() {
   $("closeSheet").focus();
 }
 function closeSheet() {
+  closeFoodList();
   $("sheet").hidden = true;
   document.body.classList.remove("sheet-open");
   $("openSheet").focus();
