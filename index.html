@@ -93,6 +93,18 @@
   .search-row { display: flex; align-items: center; gap: 12px; }
   .search-row input { flex: 1; min-width: 0; }
   #searchCancel { display: none; margin: 0; font-size: 17px; flex-shrink: 0; }
+  /* Erfassen als eigene Vollbild-Seite mit fester Kopfzeile */
+  #sheet { align-items: stretch; }
+  #sheet > .sheet { height: 100%; max-height: 100%; border-radius: 0; padding-top: 0; }
+  #sheet > .sheet::before { display: none; }
+  #sheet .sheet-head { position: sticky; top: 0; z-index: 3; background: var(--sheet); margin: 0 -16px 6px;
+    padding: calc(12px + env(safe-area-inset-top, 0px)) 16px 10px; box-shadow: 0 .5px 0 var(--line); }
+  @media (min-width: 640px) { #sheet > .sheet { border-radius: 0; } }
+  .page-head h2 { flex: 1; min-width: 0; font-size: 17px; font-weight: 600; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .page-head::before { content: ""; width: 76px; flex-shrink: 0; }
+  .page-head:has(#headBack:not([hidden]))::before { display: none; }
+  .page-head .navbtn { margin-left: 46px; }
+  .head-back { width: 76px; flex-shrink: 0; margin: 0; text-align: left; font-size: 17px; }
   /* Suchmodus: Popup oben, Barcode-Bereich aus, Liste bis zur Tastatur */
   .sheet-backdrop.searching { align-items: flex-start; }
   .sheet-backdrop.searching .sheet { border-radius: 0; height: 100%; max-height: 100%; animation: none;
@@ -429,7 +441,7 @@
 </div>
 <div class="sheet-backdrop" id="sheet" hidden>
   <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
-    <div class="sheet-head"><h2 id="sheetTitle">Nahrungsmittel erfassen</h2><button class="secondary navbtn" id="closeSheet" aria-label="Schliessen">×</button></div>
+    <div class="sheet-head page-head"><button class="linkbtn head-back" id="headBack" hidden>‹ Zurück</button><h2 id="sheetTitle">Hinzufügen</h2><button class="secondary navbtn" id="closeSheet" aria-label="Schliessen">×</button></div>
   <div id="captureStep">
       <div id="barcodeSection">
       <label class="first-label">Mit Barcode</label>
@@ -460,7 +472,7 @@
       <div id="reader"></div>
     </div>
   <div id="addCard" hidden>
-      <button class="linkbtn" id="backBtn">‹ Anderes Lebensmittel wählen</button>
+      <button class="linkbtn" id="backBtn" hidden>‹ Anderes Lebensmittel wählen</button>
       <div class="product">
         <img id="pImg" alt="">
         <div class="product-text">
@@ -482,7 +494,7 @@
       <button id="addBtn">Hinzufügen</button>
     </div>
   <div id="createStep" hidden>
-      <button class="linkbtn" id="createBack">‹ Zurück</button>
+      <button class="linkbtn" id="createBack" hidden>‹ Zurück</button>
       <label for="cName">Name</label>
       <input type="text" id="cName" placeholder="z. B. Mein Proteinshake" maxlength="60">
       <div class="row">
@@ -1047,9 +1059,10 @@ function showStep(step) {
   $("captureStep").hidden = step !== "capture";
   $("addCard").hidden = step !== "add";
   $("createStep").hidden = step !== "create";
-  const dayName = new Date(day + "T12:00:00").toLocaleDateString("de-CH", { day: "numeric", month: "long" });
-  $("sheetTitle").textContent = step === "create" ? "Eigenes Lebensmittel"
-    : day !== todayStr() ? "Nachtragen für " + dayName : "Nahrungsmittel erfassen";
+  $("headBack").hidden = step === "capture";
+  const dayName = new Date(day + "T12:00:00").toLocaleDateString("de-CH", { day: "numeric", month: "short" });
+  $("sheetTitle").textContent = step === "create" ? "Neues Lebensmittel"
+    : day !== todayStr() ? "Nachtragen " + dayName : "Hinzufügen";
 }
 function openSheet() {
   current = null;
@@ -1071,6 +1084,7 @@ function closeSheet() {
 }
 $("openSheet").addEventListener("click", openSheet);
 $("closeSheet").addEventListener("click", closeSheet);
+$("headBack").addEventListener("click", () => ($("createStep").hidden ? $("backBtn") : $("createBack")).click());
 $("backBtn").addEventListener("click", () => { setStatus(""); showStep("capture"); });
 $("sheet").addEventListener("click", e => { if (e.target === $("sheet")) closeSheet(); });
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("sheet").hidden) closeSheet(); });
