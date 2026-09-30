@@ -1140,6 +1140,8 @@ function render() {
   $("nextDay").disabled = isToday;
   $("resetBtn").hidden = !isToday;
   $("todayBtn").hidden = isToday;
+  // Erfassen nur für heute: an vergangenen Tagen die Buttons ausblenden
+  document.querySelector(".addrow").hidden = !isToday;
   $("mealsTitle").textContent = isToday ? "Heute erfasst" : "Erfasst am " + dt.toLocaleDateString("de-CH", { day: "numeric", month: "long" });
 
   // Profil-Info
