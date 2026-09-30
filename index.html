@@ -165,7 +165,8 @@
   .ing-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-top: .5px solid var(--line); }
   .ing-row:first-child { border-top: 0; }
   .ing-row .ing-name { flex: 1; min-width: 0; font-size: 16px; }
-  .ing-row .ing-name small { display: block; color: var(--muted); font-size: 12px; margin-top: 1px; }
+  .ing-row .ing-name small.ing-origin { color: var(--faint); }
+  .ing-row .ing-name small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; color: var(--muted); font-size: 12px; margin-top: 1px; }
   .ing-row input { flex: 0 0 76px; width: 76px; margin: 0; text-align: right; padding: 6px 8px; background: var(--card); }
   .ing-row .ing-unit { color: var(--muted); font-size: 15px; }
   .ing-row button { flex: 0 0 auto; width: auto; margin: 0; padding: 4px 6px; background: none; color: var(--muted); font-size: 20px; }
@@ -649,6 +650,7 @@
       </div>
       <div id="cRecipeFields" hidden>
         <label for="ingSearch">Zutaten</label>
+        <p class="recipe-meta" id="cImportHint" hidden>Werte aus der Schweizer Nährwertdatenbank. Menge anpassen, mit × entfernen oder unten weitere Zutaten suchen.</p>
         <div id="ingRows" class="ing-rows"></div>
         <div class="combo">
           <input type="text" id="ingSearch" enterkeyhint="search" autocomplete="off" placeholder="Zutat suchen, z. B. Reis, Poulet …">
@@ -659,6 +661,7 @@
           <div><label>Gesamtgewicht</label><div class="ing-weight" id="ingWeight">0 g</div></div>
         </div>
         <div class="ing-sum" id="ingSum"></div>
+        <p class="recipe-meta" id="cRecipeNote" hidden></p>
       </div>
       <div id="createStatus" class="status"></div>
       <button id="createSave">Speichern und weiter</button>
@@ -1181,7 +1184,32 @@ async function recipeRequest(payload) {
     $("rUrlGo").disabled = false;
   }
 }
+// Neue Worker-Antwort: Zutaten mit Gramm → Werte aus der Nährwertdatenbank, sonst Schätzung des Workers
+function openImportedRecipe(d) {
+  for (const id of ["cName", "ingSearch"]) $(id).value = "";
+  $("cName").value = d.name;
+  $("cServings").value = Math.max(1, Math.round(d.servings) || 1);
+  ingredients = d.ingredients.filter(i => i.grams > 0).map(i => {
+    const hit = searchSND(norm(String(i.food).trim()), 1)[0];
+    const grams = Math.round(i.grams);
+    return hit
+      ? { name: hit.name, grams, kcal: hit.kcal, protein: hit.protein, carbs: hit.carbs, fat: hit.fat, text: i.text }
+      : { name: i.food, grams, kcal: i.kcal_100g, protein: i.protein_100g, carbs: i.carbs_100g, fat: i.fat_100g, est: true, text: i.text };
+  });
+  const p = d.per_portion;
+  $("cRecipeNote").textContent = d.source === "angegeben"
+    ? `Zum Vergleich, laut Rezept pro Portion: ${r(p.kcal)} kcal · Protein ${r(p.protein)} g · Kohlenhydrate ${r(p.carbs)} g · Fett ${r(p.fat)} g.`
+    : "Mengen wurden teils aus Stück oder Löffeln umgerechnet. Bitte kurz prüfen.";
+  $("cRecipeNote").hidden = false;
+  $("ingList").hidden = true; $("customListWrap").hidden = true; $("createStatus").textContent = "";
+  recipeFrom = d;
+  renderIngredients();
+  setCreateMode("recipe", true);
+  recipeStatus("");
+  document.querySelector("#sheet .sheet").scrollTop = 0;
+}
 function showRecipe(d) {
+  if ((d.ingredients || []).length && typeof d.ingredients[0] === "object") return openImportedRecipe(d);
   recipeData = d;
   const p = d.per_portion;
   $("rName").value = d.name;
@@ -1271,8 +1299,13 @@ $("customList").addEventListener("click", e => {
 });
 // Rezept selbst zusammenstellen: Zutaten mit Gramm, Werte werden summiert und pro Portion gerechnet
 let ingredients = [], createMode = "food", ingItems = [];
-function setCreateMode(mode) {
+let recipeFrom = null; // ausgelesenes Rezept, solange es im Baukasten geprüft wird
+function setCreateMode(mode, imported = false) {
   createMode = mode;
+  recipeFrom = imported ? recipeFrom : null;
+  $("createMode").hidden = imported;
+  $("cImportHint").hidden = !imported;
+  if (!imported) $("cRecipeNote").hidden = true;
   $("createMode").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b.dataset.mode === mode));
   $("cFoodFields").hidden = mode !== "food";
   $("cRecipeFields").hidden = mode !== "recipe";
@@ -1290,9 +1323,14 @@ function recipeTotals() {
   }
   return t;
 }
+function ingMeta(i) {
+  const f = (i.grams || 0) / 100;
+  return `${r(i.kcal * f)} kcal · P ${r(i.protein * f)} · K ${r(i.carbs * f)} · F ${r(i.fat * f)}`;
+}
+const ingOrigin = i => [i.est ? "geschätzt" : "", i.text || ""].filter(Boolean).join(" · ");
 function renderIngredients() {
   $("ingRows").innerHTML = ingredients.map((i, n) => `<div class="ing-row">
-      <span class="ing-name">${esc(i.name)}<small>${r(i.kcal * (i.grams || 0) / 100)} kcal · P ${r(i.protein * (i.grams || 0) / 100)} g</small></span>
+      <span class="ing-name">${esc(i.name)}<small>${esc(ingMeta(i))}</small>${ingOrigin(i) ? `<small class="ing-origin">${esc(ingOrigin(i))}</small>` : ""}</span>
       <input type="text" inputmode="decimal" data-n="${n}" value="${i.grams || ""}" aria-label="Gramm ${esc(i.name)}"><span class="ing-unit">g</span>
       <button data-del="${n}" aria-label="${esc(i.name)} entfernen">×</button></div>`).join("");
   updateRecipeSum();
@@ -1310,7 +1348,7 @@ $("ingRows").addEventListener("input", e => {
   if (!inp) return;
   const i = ingredients[+inp.dataset.n];
   i.grams = parseFloat(inp.value.replace(",", ".")) || 0;
-  inp.previousElementSibling.querySelector("small").textContent = `${r(i.kcal * i.grams / 100)} kcal · P ${r(i.protein * i.grams / 100)} g`;
+  inp.previousElementSibling.querySelector("small").textContent = ingMeta(i);
   updateRecipeSum();
 });
 $("ingRows").addEventListener("click", e => {
@@ -1376,7 +1414,12 @@ $("newFoodBtn").addEventListener("click", () => {
   setCreateMode("food");
   $("cName").focus();
 });
-$("createBack").addEventListener("click", () => showStep("capture"));
+$("createBack").addEventListener("click", () => {
+  if (!recipeFrom) return showStep("capture");
+  recipeFrom = null;
+  showStep("recipe");
+  $("recipeResult").hidden = true; $("recipeInput").hidden = false; recipeStatus("");
+});
 $("createSave").addEventListener("click", () => {
   const name = $("cName").value.trim();
   if (createMode === "recipe") {
@@ -1390,6 +1433,7 @@ $("createSave").addEventListener("click", () => {
     customs.push(c);
     writeList(CUSTOM_KEY, customs);
     buildSelect();
+    recipeFrom = null;
     showProduct(customProduct(c), portion);
     setStatus(`Rezept „${name}“ gespeichert. 1 Portion = ${portion} g.`);
     return;
@@ -1488,7 +1532,7 @@ function showStep(step) {
   $("recipeStep").hidden = step !== "recipe";
   $("headBack").hidden = step === "capture";
   const dayName = new Date(day + "T12:00:00").toLocaleDateString("de-CH", { day: "numeric", month: "short" });
-  $("sheetTitle").textContent = step === "create" ? (createMode === "recipe" ? "Neues Rezept" : "Neues Lebensmittel") : step === "recipe" ? "Rezept"
+  $("sheetTitle").textContent = step === "create" ? (recipeFrom ? "Rezept prüfen" : createMode === "recipe" ? "Neues Rezept" : "Neues Lebensmittel") : step === "recipe" ? "Rezept"
     : day !== todayStr() ? "Nachtragen " + dayName : "Hinzufügen";
 }
 function openSheet() {

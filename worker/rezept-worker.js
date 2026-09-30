@@ -24,7 +24,22 @@ const SCHEMA = {
         carbs: { type: "number" }, fat: { type: "number" }
       }
     },
-    ingredients: { type: "array", items: { type: "string" }, description: "Zutaten mit Mengen, kurz" },
+    ingredients: {
+      type: "array",
+      description: "Alle Zutaten des ganzen Rezepts (nicht pro Portion)",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["text", "food", "grams", "kcal_100g", "protein_100g", "carbs_100g", "fat_100g"],
+        properties: {
+          text: { type: "string", description: "Zutat wie im Rezept, z. B. \"2 Schalotten\"" },
+          food: { type: "string", description: "Einfacher Lebensmittelname für die Suche in einer Nährwertdatenbank, Einzahl, ohne Menge und Zusätze, z. B. \"Schalotte\", \"Vollrahm\", \"Gemüsebouillon\"" },
+          grams: { type: "number", description: "Menge im ganzen Rezept in Gramm (Stück, EL, dl usw. umgerechnet); 0 bei Salz, Pfeffer, Gewürzen nach Bedarf" },
+          kcal_100g: { type: "number" }, protein_100g: { type: "number" },
+          carbs_100g: { type: "number" }, fat_100g: { type: "number" }
+        }
+      }
+    },
     source: { type: "string", enum: ["angegeben", "geschaetzt"],
               description: "angegeben, wenn das Rezept selbst Nährwerte nennt; sonst geschaetzt" },
     note: { type: "string", description: "Kurzer Hinweis auf Unsicherheiten, sonst leer" }
@@ -35,7 +50,8 @@ const SYSTEM = `Du bist Ernährungsberater. Du bekommst ein Rezept (Text oder Bi
 Ermittle Name, Anzahl Portionen, Gewicht einer Portion und die Nährwerte PRO PORTION
 (kcal, Protein g, Kohlenhydrate g, Fett g). Nennt das Rezept selbst Nährwerte, übernimm diese
 (source = "angegeben"), sonst berechne sie aus Zutaten und Mengen mit üblichen Nährwerttabellen
-(source = "geschaetzt"). Antworte auf Deutsch. Ist kein Rezept erkennbar, setze name auf "",
+(source = "geschaetzt"). Liste bei den Zutaten jede Zutat einzeln mit Menge in Gramm für das ganze Rezept
+und üblichen Nährwerten pro 100 g. Kommt eine Zutat mehrfach vor, fasse sie zusammen. Antworte auf Deutsch. Ist kein Rezept erkennbar, setze name auf "",
 alle Zahlen auf 0 und erkläre es in note.`;
 
 function cors(env) {
