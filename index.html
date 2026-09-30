@@ -156,6 +156,7 @@
   .addrow .addbtn { margin: 0; }
   .addbtn { font-size: 16px; font-weight: 600; padding: 14px 10px; border-radius: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .addbtn.sport { flex: 0 0 34%; background: var(--accent-soft); color: var(--accent); }
+  .backfill { display: block; margin: 12px auto 0; font-size: 15px; color: var(--muted); }
   #toast { text-align: center; color: var(--good); font-weight: 500; font-size: 15px; min-height: 0; margin: 10px 0 0; }
   #toast:empty { display: none; }
 
@@ -332,6 +333,7 @@
       <button id="openSheet" class="addbtn">+ Nahrungsmittel</button>
       <button id="openSport" class="addbtn sport">+ Sport</button>
     </div>
+    <button class="linkbtn backfill" id="backfillBtn" hidden>Nachtragen</button>
     <div id="toast" class="status" role="status"></div>
     <div id="goalView"></div>
     <div id="summary"></div>
@@ -363,7 +365,7 @@
 <div class="sheet-backdrop" id="confirmSheet" hidden>
   <div class="sheet confirm" role="alertdialog" aria-modal="true" aria-labelledby="confirmTitle" aria-describedby="confirmText">
     <h2 id="confirmTitle">Alle Einträge löschen?</h2>
-    <p id="confirmText">Alle Nahrungsmittel und Sporteinträge von heute werden gelöscht. Das lässt sich nicht rückgängig machen.</p>
+    <p id="confirmText">Alle Nahrungsmittel und Sporteinträge dieses Tages werden gelöscht. Das lässt sich nicht rückgängig machen.</p>
     <div class="row">
       <button class="secondary" id="confirmCancel">Abbrechen</button>
       <button class="danger" id="confirmOk">Löschen</button>
@@ -524,7 +526,10 @@ function save() {
   try {
     localStorage.setItem(DAY_PREFIX + day, JSON.stringify(entries));
   } catch {}
-  saveTargetSnapshot(day);
+  // Vergangene Tage behalten ihr damaliges Ziel, sofern schon eines gespeichert ist
+  let hasTarget = false;
+  try { hasTarget = !!localStorage.getItem(TARGET_PREFIX + day); } catch {}
+  if (day === todayStr() || !hasTarget) saveTargetSnapshot(day);
 }
 // Zielwerte des Tages festhalten, damit spätere Profiländerungen alte Tage nicht verändern
 function saveTargetSnapshot(d) {
@@ -944,10 +949,12 @@ $("sActivity").addEventListener("change", estimateSport);
 $("sMinutes").addEventListener("input", estimateSport);
 $("sKcal").addEventListener("input", () => { sportKcalTouched = $("sKcal").value !== ""; });
 function openSport() {
-  if (day !== todayStr()) setDay(todayStr());
+  if (day !== todayStr() && !backfill) setDay(todayStr());
   sportKcalTouched = false;
   $("sKcal").value = "";
   estimateSport();
+  $("sportTitle").textContent = day !== todayStr()
+    ? "Sport nachtragen für " + new Date(day + "T12:00:00").toLocaleDateString("de-CH", { day: "numeric", month: "long" }) : "Sport eintragen";
   $("sportSheet").hidden = false;
   document.body.classList.add("sheet-open");
   $("closeSport").focus();
@@ -982,7 +989,9 @@ function showStep(step) {
   $("captureStep").hidden = step !== "capture";
   $("addCard").hidden = step !== "add";
   $("createStep").hidden = step !== "create";
-  $("sheetTitle").textContent = step === "create" ? "Eigenes Lebensmittel" : "Nahrungsmittel erfassen";
+  const dayName = new Date(day + "T12:00:00").toLocaleDateString("de-CH", { day: "numeric", month: "long" });
+  $("sheetTitle").textContent = step === "create" ? "Eigenes Lebensmittel"
+    : day !== todayStr() ? "Nachtragen für " + dayName : "Nahrungsmittel erfassen";
 }
 function openSheet() {
   current = null;
@@ -991,7 +1000,7 @@ function openSheet() {
   setStatus("");
   showStep("capture");
   // Erfasst wird immer für heute
-  if (day !== todayStr()) setDay(todayStr());
+  if (day !== todayStr() && !backfill) setDay(todayStr());
   $("sheet").hidden = false;
   document.body.classList.add("sheet-open");
   $("closeSheet").focus();
@@ -1022,14 +1031,16 @@ $("resetBtn").addEventListener("click", openConfirm);
 $("confirmCancel").addEventListener("click", closeConfirm);
 $("confirmOk").addEventListener("click", () => {
   entries = []; save(); render(); closeConfirm();
-  showToast("Alle Einträge von heute gelöscht");
+  showToast("Alle Einträge dieses Tages gelöscht");
 });
 $("confirmSheet").addEventListener("click", e => { if (e.target === $("confirmSheet")) closeConfirm(); });
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("confirmSheet").hidden) closeConfirm(); });
 
+let backfill = false; // "Nachtragen" für einen vergangenen Tag aktiv
 function setDay(d) {
   if (d > todayStr()) return;
   day = d;
+  backfill = false;
   entries = load(d);
   render();
 }
@@ -1041,6 +1052,7 @@ function shiftDay(n) {
 $("prevDay").addEventListener("click", () => shiftDay(-1));
 $("nextDay").addEventListener("click", () => shiftDay(1));
 $("todayBtn").addEventListener("click", () => setDay(todayStr()));
+$("backfillBtn").addEventListener("click", () => { backfill = true; render(); });
 
 function removeEntry(id) {
   entries = entries.filter(e => e.id !== id);
@@ -1138,10 +1150,12 @@ function render() {
   $("dayLabel").textContent = isToday ? "Heute" : day === dateStr(yest) ? "Gestern"
     : dt.toLocaleDateString("de-CH", { weekday: "short", day: "numeric", month: "long", year: dt.getFullYear() === new Date().getFullYear() ? undefined : "numeric" });
   $("nextDay").disabled = isToday;
-  $("resetBtn").hidden = !isToday;
+  const editable = isToday || backfill;
+  $("resetBtn").hidden = !editable;
   $("todayBtn").hidden = isToday;
   // Erfassen nur für heute: an vergangenen Tagen die Buttons ausblenden
-  document.querySelector(".addrow").hidden = !isToday;
+  document.querySelector(".addrow").hidden = !editable;
+  $("backfillBtn").hidden = editable;
   $("mealsTitle").textContent = isToday ? "Heute erfasst" : "Erfasst am " + dt.toLocaleDateString("de-CH", { day: "numeric", month: "long" });
 
   // Profil-Info
@@ -1203,7 +1217,7 @@ function render() {
           : `<div class="e-main"><div class="e-name">${esc(e.name)}</div>
                <div class="e-meta">${fmtTime(e.time)} · ${r(e.grams)} g</div></div>
              <div class="e-kcal">${r(e.kcal)} kcal</div>`}
-        ${isToday ? `<button onclick="removeEntry(${e.id})" aria-label="Entfernen">×</button>` : ""}</div>`).join("")
+        ${editable ? `<button onclick="removeEntry(${e.id})" aria-label="Entfernen">×</button>` : ""}</div>`).join("")
     : '<p class="empty">Noch nichts erfasst.</p>';
   renderHeatmap();
 }
