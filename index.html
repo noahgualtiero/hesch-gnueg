@@ -156,6 +156,10 @@
   #recipeSection { margin-top: 6px; }
   .recipe-hint, .recipe-meta { font-size: 14px; color: var(--muted); line-height: 1.45; margin: 4px 0 6px; }
   .recipe-shot { width: 100%; }
+  .ing-photo { width: 100%; margin-bottom: 10px; }
+  #ingPhotoStatus:empty { display: none; }
+  #ingPhotoStatus { margin: 0 0 10px; }
+  #ingPhotoSpin { margin: 4px auto 8px; }
   .linkbtn.recipe-cfg-link { display: block; margin: 28px auto 0; font-size: 14px; color: var(--muted); text-align: center; }
   .recipe-ing { margin-top: 14px; font-size: 14px; }
   .recipe-ing summary { cursor: pointer; color: var(--accent); }
@@ -689,6 +693,12 @@
       </div>
       <div id="cRecipeFields" hidden>
         <label for="ingSearch">Zutaten</label>
+        <label class="choice-opt ing-photo">Zutaten per Foto erkennen
+          <small>Foto der Zutaten oder des Gerichts, Mengen danach anpassen</small>
+          <input type="file" id="ingPhoto" accept="image/*">
+        </label>
+        <div class="spin" id="ingPhotoSpin" hidden aria-hidden="true"><svg viewBox="0 0 32 32"><circle class="ptr-track" cx="16" cy="16" r="11"/><circle class="ptr-arc" cx="16" cy="16" r="11"/></svg></div>
+        <div class="status" id="ingPhotoStatus"></div>
         <p class="recipe-meta" id="cImportHint" hidden>Werte aus der Schweizer Nährwertdatenbank. Menge anpassen, mit × entfernen oder unten weitere Zutaten suchen.</p>
         <div id="ingRows" class="ing-rows"></div>
         <div class="combo">
@@ -1350,6 +1360,7 @@ function setCreateMode(mode, imported = false) {
   $("createMode").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b.dataset.mode === mode));
   $("cFoodFields").hidden = mode !== "food";
   $("cRecipeFields").hidden = mode !== "recipe";
+  ingPhotoStatus("");
   $("cName").placeholder = mode === "recipe" ? "z. B. Poulet-Curry mit Reis" : "z. B. Mein Proteinshake";
   $("createStatus").textContent = "";
   showStep("create");
@@ -1368,7 +1379,7 @@ function ingMeta(i) {
   const f = (i.grams || 0) / 100;
   return `${r(i.kcal * f)} kcal · P ${r(i.protein * f)} · K ${r(i.carbs * f)} · F ${r(i.fat * f)}`;
 }
-const ingOrigin = i => [i.est ? "geschätzt" : "", i.text || ""].filter(Boolean).join(" · ");
+const ingOrigin = i => [i.est ? "Nährwerte geschätzt" : "", i.text || ""].filter(Boolean).join(" · ");
 function renderIngredients() {
   $("ingRows").innerHTML = ingredients.map((i, n) => `<div class="ing-row">
       <span class="ing-name">${esc(i.name)}<small>${esc(ingMeta(i))}</small>${ingOrigin(i) ? `<small class="ing-origin">${esc(ingOrigin(i))}</small>` : ""}</span>
@@ -1399,6 +1410,55 @@ $("ingRows").addEventListener("click", e => {
   renderIngredients();
 });
 $("cServings").addEventListener("input", updateRecipeSum);
+// Zutaten per Foto: KI erkennt die Zutaten und schätzt Mengen, Werte wenn möglich aus der Nährwertdatenbank
+function ingPhotoStatus(msg, error) {
+  $("ingPhotoStatus").textContent = msg;
+  $("ingPhotoStatus").className = "status" + (error ? " error" : "");
+}
+$("ingPhoto").addEventListener("change", async e => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (!file) return;
+  const cfg = recipeCfg();
+  if (!cfg.url || !cfg.token) {
+    ingPhotoStatus("Dafür braucht es den Rezept-Worker. Richte ihn unter „Rezept auslesen“ ein.", true);
+    return;
+  }
+  let image;
+  try {
+    const img = await loadImage(file);
+    const scale = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement("canvas");
+    c.width = Math.round(img.naturalWidth * scale); c.height = Math.round(img.naturalHeight * scale);
+    c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+    URL.revokeObjectURL(img.src);
+    image = c.toDataURL("image/jpeg", 0.85);
+  } catch { ingPhotoStatus("Das Bild konnte nicht gelesen werden.", true); return; }
+  ingPhotoStatus("Zutaten werden erkannt …");
+  $("ingPhotoSpin").hidden = false;
+  try {
+    const res = await fetch(cfg.url, { method: "POST", headers: { "Content-Type": "application/json", "X-App-Token": cfg.token },
+                                       body: JSON.stringify({ image, mode: "zutaten" }) });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(d.error || `Fehler ${res.status}`);
+    const found = (d.ingredients || []).filter(i => i && typeof i === "object" && i.food && i.grams > 0);
+    if (!found.length) throw new Error(d.note || "Keine Zutaten erkannt.");
+    for (const i of found) {
+      const hit = searchSND(norm(String(i.food).trim()), 1)[0];
+      const grams = Math.round(i.grams);
+      ingredients.push(hit
+        ? { name: hit.name, grams, kcal: hit.kcal, protein: hit.protein, carbs: hit.carbs, fat: hit.fat, text: "Menge geschätzt" }
+        : { name: i.food, grams, kcal: i.kcal_100g, protein: i.protein_100g, carbs: i.carbs_100g, fat: i.fat_100g, est: true, text: "Menge geschätzt" });
+    }
+    if (!$("cName").value.trim() && d.name) $("cName").value = d.name;
+    renderIngredients();
+    ingPhotoStatus(`${found.length} ${found.length === 1 ? "Zutat" : "Zutaten"} erkannt. Die Mengen sind geschätzt, bitte anpassen.`);
+  } catch (err) {
+    ingPhotoStatus(err.message === "Failed to fetch" ? "Worker nicht erreichbar. Adresse prüfen." : err.message, true);
+  } finally {
+    $("ingPhotoSpin").hidden = true;
+  }
+});
 const it0 = group => group === "Nährwerttabelle" ? 40 : 8;
 function renderIngList() {
   const raw = $("ingSearch").value.trim(), q = norm(raw);

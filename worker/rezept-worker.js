@@ -1,5 +1,6 @@
 // Gnueg – Rezept-Worker (Cloudflare Workers)
 // Nimmt einen Rezept-Link oder ein Rezept-Bild entgegen und liefert Nährwerte pro Portion.
+// Mit mode "zutaten" erkennt er Zutaten auf einem Foto (Zutaten oder fertiges Gericht) und schätzt Mengen.
 // Variablen in Cloudflare (Settings → Variables and Secrets):
 //   OPENAI_API_KEY  (Secret)  dein OpenAI-API-Schlüssel
 //   APP_TOKEN       (Secret)  frei gewählter Zugangscode, den du in der App einträgst
@@ -83,7 +84,14 @@ async function pageText(url) {
   return (ld ? `Strukturierte Rezeptdaten (JSON-LD):\n${ld}\n\n` : "") + `Seitentext:\n${text}`;
 }
 
-async function askOpenAI(env, content) {
+const SYSTEM_ZUTATEN = `Du bist Ernährungsberater. Du bekommst ein Foto von Zutaten oder einem zubereiteten Gericht.
+Erkenne jede einzelne sichtbare Zutat und schätze ihre Menge in Gramm anhand von Tellergrösse, Besteck und Verpackungen.
+Berücksichtige auch wahrscheinlich verwendetes Öl, Butter oder Sauce, wenn sie erkennbar sind. Gib pro Zutat übliche
+Nährwerte pro 100 g an. Setze name auf eine kurze Bezeichnung des Gerichts, servings auf 1, portion_grams auf das
+Gesamtgewicht, per_portion auf die Summe, source auf "geschaetzt". Antworte auf Deutsch. Sind keine Lebensmittel erkennbar,
+gib eine leere Zutatenliste zurück und erkläre es in note.`;
+
+async function askOpenAI(env, content, system = SYSTEM) {
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: { "Authorization": `Bearer ${env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
@@ -91,7 +99,7 @@ async function askOpenAI(env, content) {
       model: MODEL,
       temperature: 0.2,
       response_format: { type: "json_schema", json_schema: { name: "rezept", strict: true, schema: SCHEMA } },
-      messages: [{ role: "system", content: SYSTEM }, { role: "user", content }]
+      messages: [{ role: "system", content: system }, { role: "user", content }]
     })
   });
   const data = await res.json();
@@ -124,6 +132,11 @@ export default {
       } else if (body.image) {
         if (!/^data:image\/(png|jpe?g|webp|gif);base64,/.test(body.image) || body.image.length > 8_000_000)
           return json({ error: "Bild ungültig oder zu gross." }, 400, headers);
+        if (body.mode === "zutaten") {
+          const content = [{ type: "text", text: "Hier ist ein Foto von Zutaten oder einem Gericht." },
+                           { type: "image_url", image_url: { url: body.image } }];
+          return json(await askOpenAI(env, content, SYSTEM_ZUTATEN), 200, headers);
+        }
         content = [{ type: "text", text: "Hier ist ein Screenshot oder Foto eines Rezepts." },
                    { type: "image_url", image_url: { url: body.image } }];
       } else if (body.text) {
