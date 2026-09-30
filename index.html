@@ -270,7 +270,8 @@
                           background: var(--faint); margin-right: 5px; vertical-align: 1px; }
   .e-side .dens.good, .e-side .dens.bad { color: var(--muted); font-weight: 400; }
   .e-side .dens.good::before { background: var(--good); }
-  .e-side .dens.bad::before { background: var(--faint); }
+  .e-side .dens.bad::before { background: var(--danger); }
+  .e-side .dens.bad { color: var(--danger); }
   .e-kcal { font-weight: 400; font-size: 14px; color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .e-kcal.sport { color: var(--text); }
   .entry[data-id] { cursor: pointer; }
@@ -292,7 +293,7 @@
   .dens-legend span { white-space: nowrap; }
   .dens-legend i { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin: 0 4px 0 2px; vertical-align: 1px; }
   .dens-legend i.good { background: var(--good); }
-  .dens-legend i.bad { background: var(--faint); }
+  .dens-legend i.bad { background: var(--danger); }
   #entryBody .legend { margin: 8px 0 16px; }
   .delete-link { background: none; color: var(--danger); font-weight: 400; margin-top: 14px; }
   .tag { display: inline-block; font-size: 12px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase;
@@ -306,7 +307,7 @@
   .segmented button[aria-pressed="true"] { background: var(--card); font-weight: 600; box-shadow: 0 1px 3px rgba(0, 0, 0, .12); }
   .dens { white-space: nowrap; }
   .dens.good { color: var(--good); font-weight: 500; }
-  .dens.bad { color: var(--muted); font-weight: 500; }
+  .dens.bad { color: var(--danger); font-weight: 500; }
 
   /* Profil */
   details.card > summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between;
@@ -2107,11 +2108,9 @@ const WIZ = [
               ["1.6", "Viel auf den Beinen", "Verkauf, Pflege, Handwerk"]] },
   { key: "goal", field: "pGoal", q: "Was ist dein Ziel?",
     options: [["-500", "Gewicht reduzieren", "500 kcal unter dem Bedarf"], ["0", "Gewicht halten", "genau der Bedarf"],
-              ["300", "Muskeln aufbauen", "300 kcal über dem Bedarf"]] },
-  { key: "protein", field: "pProtein", q: "Wie viel Protein möchtest du?", why: "Angabe in Gramm pro kg Körpergewicht.",
-    options: [["1.6", "1,6 g pro kg", "Normal aktiv"], ["2", "2 g pro kg", "Training oder Gewichtsreduktion"],
-              ["2.2", "2,2 g pro kg", "Viel Krafttraining"]] }
+              ["300", "Muskeln aufbauen", "300 kcal über dem Bedarf"]] }
 ];
+// Protein wird nicht abgefragt: Standard 2 g pro kg, änderbar im Profil
 const wiz = { step: 0, data: {} };
 
 function openWizard() {
