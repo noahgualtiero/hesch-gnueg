@@ -95,8 +95,15 @@
   #searchCancel { display: none; margin: 0; font-size: 17px; flex-shrink: 0; }
   /* Suchmodus: Popup oben, Barcode-Bereich aus, Liste bis zur Tastatur */
   .sheet-backdrop.searching { align-items: flex-start; }
-  .sheet-backdrop.searching .sheet { border-radius: 0 0 14px 14px; max-height: 100%; animation: none;
-    padding-top: calc(12px + env(safe-area-inset-top, 0px)); }
+  .sheet-backdrop.searching .sheet { border-radius: 0; height: 100%; max-height: 100%; animation: none;
+    display: flex; flex-direction: column; overflow: hidden;
+    padding-top: calc(12px + env(safe-area-inset-top, 0px)); padding-bottom: 0; }
+  .sheet-backdrop.searching #captureStep { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .sheet-backdrop.searching .combo { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .sheet-backdrop.searching .combo-list { flex: 1; max-height: none; margin-bottom: 0; border-radius: 12px 12px 0 0; }
+  /* Scroll-Raum in Tastaturhöhe, damit auch der letzte Eintrag über die Tastatur scrollbar ist */
+  .sheet-backdrop.searching .combo-list::after { content: ""; display: block; height: var(--kb, 45vh); }
+  .sheet-backdrop.searching #status, .sheet-backdrop.searching #reader { display: none; }
   .sheet-backdrop.searching .sheet::before, .sheet-backdrop.searching .sheet-head,
   .sheet-backdrop.searching #barcodeSection, .sheet-backdrop.searching #newFoodBtn { display: none; }
   .sheet-backdrop.searching #searchCancel { display: block; }
@@ -827,13 +834,13 @@ function openFoodList() {
   setTimeout(fitFoodList, 350); // nach dem Einblenden der Tastatur nochmals messen
 }
 function closeFoodList() { $("foodList").hidden = true; $("foodSearch").setAttribute("aria-expanded", "false"); $("sheet").classList.remove("searching"); }
-// Liste so hoch machen, dass sie genau bis zur Tastatur reicht
+// Tastaturhöhe messen, wo der Browser sie meldet; sonst bleibt die Schätzung aus dem CSS (45 % der Höhe)
 function fitFoodList() {
-  const list = $("foodList");
-  if (list.hidden) return;
   const vv = window.visualViewport;
-  const bottom = vv ? vv.height + vv.offsetTop : window.innerHeight;
-  list.style.maxHeight = Math.max(160, bottom - list.getBoundingClientRect().top - 12) + "px";
+  if (!vv) return;
+  const kb = window.innerHeight - (vv.height + vv.offsetTop);
+  if (kb > 80) $("foodList").style.setProperty("--kb", (kb + 16) + "px");
+  else $("foodList").style.removeProperty("--kb");
 }
 if (window.visualViewport) {
   window.visualViewport.addEventListener("resize", fitFoodList);
