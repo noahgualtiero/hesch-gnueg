@@ -210,6 +210,14 @@
   #resetBtn { margin-top: 14px; background: none; color: var(--danger); font-weight: 400; font-size: 17px; padding: 8px; }
   button.danger { background: var(--danger); color: #FFFFFF; }
 
+  /* Sortier-Umschalter im iOS-Stil */
+  .segmented { display: flex; background: var(--soft); border-radius: 9px; padding: 2px; margin: -4px 0 12px; }
+  .segmented button { flex: 1; margin: 0; padding: 6px 4px; border-radius: 7px; background: none; color: var(--text);
+                      font-size: 13px; font-weight: 500; }
+  .segmented button[aria-pressed="true"] { background: var(--card); font-weight: 600; box-shadow: 0 1px 3px rgba(0, 0, 0, .12); }
+  .dens { white-space: nowrap; }
+  .dens.good { color: var(--good); font-weight: 500; }
+
   /* Profil */
   details.card > summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between;
     align-items: center; gap: 12px; font-weight: 400; font-size: 17px; }
@@ -391,6 +399,9 @@
 
   <section class="card">
     <h2 id="mealsTitle">Heute gegessen</h2>
+    <div class="segmented" id="sortBar" role="group" aria-label="Sortieren nach">
+      <button data-sort="time">Zeit</button><button data-sort="density">Protein/kcal</button><button data-sort="kcal">kcal</button>
+    </div>
     <div id="meals"></div>
     <button class="secondary" id="resetBtn">Tag zurücksetzen</button>
   </section>
@@ -743,7 +754,8 @@ function showProduct(product, portion) {
   $("pImg").src = current.img;
   $("pImg").style.display = current.img ? "block" : "none";
   $("pPer100").textContent =
-    `pro 100 g: ${r(current.kcal)} kcal · P ${r(current.protein)} g · K ${r(current.carbs)} g · F ${r(current.fat)} g`;
+    `pro 100 g: ${r(current.kcal)} kcal · P ${r(current.protein)} g · K ${r(current.carbs)} g · F ${r(current.fat)} g` +
+    (current.kcal > 0 ? ` · ${fmtDensity(current.protein / current.kcal * 100)} g Protein/100 kcal` : "");
   $("portion").value = portion;
   $("count").value = 1;
   showStep("add");
@@ -1111,7 +1123,13 @@ $("sheet").addEventListener("click", e => { if (e.target === $("sheet")) closeSh
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("sheet").hidden) closeSheet(); });
 
 // Tag zurücksetzen mit Bestätigungs-Popup (confirm() ist nicht überall verfügbar)
-function openConfirm() {
+// Bestätigungs-Popup, für "Tag zurücksetzen" und einzelne Einträge
+let confirmAction = null, confirmReturn = null;
+function openConfirm({ title, text, ok = "Löschen", action, returnFocus }) {
+  $("confirmTitle").textContent = title;
+  $("confirmText").textContent = text;
+  $("confirmOk").textContent = ok;
+  confirmAction = action; confirmReturn = returnFocus || null;
   $("confirmSheet").hidden = false;
   document.body.classList.add("sheet-open");
   $("confirmCancel").focus();
@@ -1119,14 +1137,17 @@ function openConfirm() {
 function closeConfirm() {
   $("confirmSheet").hidden = true;
   document.body.classList.remove("sheet-open");
-  $("resetBtn").focus();
+  confirmAction = null;
+  if (confirmReturn && document.contains(confirmReturn)) confirmReturn.focus();
 }
-$("resetBtn").addEventListener("click", openConfirm);
+$("resetBtn").addEventListener("click", () => openConfirm({
+  title: "Alle Einträge löschen?",
+  text: "Alle Nahrungsmittel und Sporteinträge dieses Tages werden gelöscht. Das lässt sich nicht rückgängig machen.",
+  returnFocus: $("resetBtn"),
+  action: () => { entries = []; save(); render(); showToast("Alle Einträge dieses Tages gelöscht"); }
+}));
 $("confirmCancel").addEventListener("click", closeConfirm);
-$("confirmOk").addEventListener("click", () => {
-  entries = []; save(); render(); closeConfirm();
-  showToast("Alle Einträge dieses Tages gelöscht");
-});
+$("confirmOk").addEventListener("click", () => { const a = confirmAction; closeConfirm(); if (a) a(); });
 $("confirmSheet").addEventListener("click", e => { if (e.target === $("confirmSheet")) closeConfirm(); });
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("confirmSheet").hidden) closeConfirm(); });
 
@@ -1149,8 +1170,14 @@ $("todayBtn").addEventListener("click", () => setDay(todayStr()));
 $("backfillBtn").addEventListener("click", () => { backfill = true; render(); });
 
 function removeEntry(id) {
-  entries = entries.filter(e => e.id !== id);
-  save(); render();
+  const e = entries.find(x => x.id === id);
+  if (!e) return;
+  openConfirm({
+    title: `„${e.name}“ löschen?`,
+    text: e.kind === "sport" ? `${r(e.minutes)} min · ${r(e.kcal)} kcal Sport werden entfernt.`
+                             : `${r(e.grams)} g · ${r(e.kcal)} kcal werden aus diesem Tag entfernt.`,
+    action: () => { entries = entries.filter(x => x.id !== id); save(); render(); showToast(`„${e.name}“ gelöscht`); }
+  });
 }
 
 function sum(list) {
@@ -1231,6 +1258,19 @@ function progress(label, value, target, unit, color, mustReach, extra = "") {
     </div>`;
 }
 
+// Protein-Dichte: Gramm Protein pro 100 kcal
+const density = e => e.kcal > 0 ? e.protein / e.kcal * 100 : 0;
+const fmtDensity = v => v.toLocaleString("de-CH", { maximumFractionDigits: 1 });
+let sortMode = "time";
+try { sortMode = localStorage.getItem("naehrwert-sortierung") || "time"; } catch {}
+$("sortBar").addEventListener("click", e => {
+  const b = e.target.closest("button[data-sort]");
+  if (!b) return;
+  sortMode = b.dataset.sort;
+  try { localStorage.setItem("naehrwert-sortierung", sortMode); } catch {}
+  render();
+});
+
 function render() {
   const total = sum(entries);
   const s = split(total);
@@ -1302,14 +1342,24 @@ function render() {
       </div>`;
   }
 
-  const list = [...entries].sort((x, y) => (x.time || "").localeCompare(y.time || ""));
+  const byTime = (x, y) => (x.time || "").localeCompare(y.time || "");
+  const food = e => e.kind !== "sport";
+  const list = [...entries].sort((x, y) => {
+    if (sortMode === "time") return byTime(x, y);
+    if (food(x) !== food(y)) return food(x) ? -1 : 1; // Sport ans Ende
+    const v = e => sortMode === "density" ? density(e) : e.kcal;
+    return v(y) - v(x) || byTime(x, y);
+  });
+  document.querySelectorAll("#sortBar button").forEach(b => b.setAttribute("aria-pressed", b.dataset.sort === sortMode));
+  $("sortBar").hidden = entries.filter(food).length < 2;
   $("meals").innerHTML = list.length
     ? list.map(e => `<div class="entry">${e.kind === "sport"
           ? `<div class="e-main"><div class="e-name"><span class="tag">Sport</span>${esc(e.name)}</div>
                <div class="e-meta">${fmtTime(e.time)} · ${r(e.minutes)} min</div></div>
              <div class="e-kcal sport">+${r(e.kcal)} kcal</div>`
           : `<div class="e-main"><div class="e-name">${esc(e.name)}</div>
-               <div class="e-meta">${fmtTime(e.time)} · ${r(e.grams)} g</div></div>
+               <div class="e-meta">${fmtTime(e.time)} · ${r(e.grams)} g ·
+                 <span class="dens${density(e) >= 10 ? " good" : ""}">${fmtDensity(density(e))} g P/100 kcal</span></div></div>
              <div class="e-kcal">${r(e.kcal)} kcal</div>`}
         ${editable ? `<button onclick="removeEntry(${e.id})" aria-label="Entfernen">×</button>` : ""}</div>`).join("")
     : '<p class="empty">Noch nichts erfasst.</p>';
