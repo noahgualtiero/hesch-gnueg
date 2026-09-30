@@ -204,6 +204,9 @@
   .over-text { color: var(--danger); }
   .credits { font-size: 12px; line-height: 1.5; color: var(--muted); text-align: center; margin: 4px 16px 24px; }
   .credits a { color: inherit; }
+  .data-links { margin-top: -14px; }
+  .data-links .linkbtn { display: inline; margin: 0; padding: 0; font-size: 12px; color: inherit; text-decoration: underline;
+                         text-transform: none; letter-spacing: 0; cursor: pointer; }
   .stats { background: var(--soft); border-radius: 12px; padding: 4px 14px; margin-top: 16px; }
   .stat { padding: 12px 0; }
   .stat + .stat { border-top: .5px solid var(--line); }
@@ -400,6 +403,9 @@
   .sheet.confirm h2 { margin: 6px 0 6px; font-size: 16px; font-weight: 600; }
   .sheet.confirm p { margin: 0 0 4px; line-height: 1.4; color: var(--muted); font-size: 14px; }
   .sheet.confirm .row button { margin-top: 18px; }
+  #exportSheet button:not(.linkbtn) { margin-top: 12px; }
+  #exportSheet h2 + p { margin-bottom: 6px; }
+  .export-cancel { display: block; margin: 16px auto 0; font-size: 16px; color: var(--muted); }
   @keyframes sheetIn { from { transform: translateY(100%); } to { transform: none; } }
   @media (min-width: 640px) {
     .sheet-backdrop { align-items: center; }
@@ -492,6 +498,10 @@
   </section>
   <p class="credits">Nährwerte: <a href="https://naehrwertdaten.ch" target="_blank" rel="noopener">Schweizer Nährwertdatenbank</a> V 7.1,
     Bundesamt für Lebensmittelsicherheit und Veterinärwesen BLV · Produkte: <a href="https://world.openfoodfacts.org" target="_blank" rel="noopener">Open Food Facts</a> (ODbL)</p>
+  <p class="credits data-links">
+    <button class="linkbtn" id="exportBtn">Daten exportieren</button> ·
+    <label class="linkbtn" id="importLabel">Daten importieren<input type="file" id="importFile" accept="application/json,.json" hidden></label>
+  </p>
 </main>
 
 <div class="wizard" id="wizard" hidden role="dialog" aria-modal="true" aria-labelledby="wizTitle">
@@ -512,6 +522,15 @@
     <div class="sheet-head"><h2 id="entryTitle"></h2><button class="secondary navbtn" id="closeEntry" aria-label="Schliessen">×</button></div>
     <div id="entryBody"></div>
     <button class="delete-link" id="entryDelete">Eintrag löschen</button>
+  </div>
+</div>
+<div class="sheet-backdrop" id="exportSheet" hidden>
+  <div class="sheet confirm" role="dialog" aria-modal="true" aria-labelledby="exportTitle">
+    <h2 id="exportTitle">Was möchtest du exportieren?</h2>
+    <p>Die Datei kannst du in Dateien sichern oder auf ein anderes Gerät übertragen.</p>
+    <button id="exportFoods">Lebensmittel und Rezepte</button>
+    <button class="secondary" id="exportAll">Alle Daten</button>
+    <button class="linkbtn export-cancel" id="exportCancel">Abbrechen</button>
   </div>
 </div>
 <div class="sheet-backdrop" id="confirmSheet" hidden>
@@ -2076,6 +2095,95 @@ try { if (window.self !== window.top) document.documentElement.classList.add("em
     dist = 0;
   }, { passive: true });
 })();
+
+// Datensicherung: alle Gnueg-Daten (Schlüssel "naehrwert-…") als JSON-Datei
+const DATA_PREFIX = "naehrwert-";
+function allDataKeys() {
+  const keys = [];
+  try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.startsWith(DATA_PREFIX)) keys.push(k); } } catch {}
+  return keys.sort();
+}
+// Lebensmittel und Rezepte = eigene Einträge (inkl. Rezepte), Favoriten, zuletzt verwendet
+const FOOD_KEYS = [CUSTOM_KEY, FAV_KEY, USED_KEY];
+function openExport() { $("exportSheet").hidden = false; document.body.classList.add("sheet-open"); $("exportFoods").focus(); }
+function closeExport() {
+  $("exportSheet").hidden = true;
+  if (!document.querySelector(".sheet-backdrop:not([hidden])")) document.body.classList.remove("sheet-open");
+}
+$("exportBtn").addEventListener("click", openExport);
+$("exportCancel").addEventListener("click", closeExport);
+$("exportSheet").addEventListener("click", e => { if (e.target === $("exportSheet")) closeExport(); });
+$("exportFoods").addEventListener("click", () => { closeExport(); exportData("foods"); });
+$("exportAll").addEventListener("click", () => { closeExport(); exportData("all"); });
+async function exportData(scope) {
+  const data = {};
+  const keys = scope === "foods" ? FOOD_KEYS.filter(k => localStorage.getItem(k) != null) : allDataKeys();
+  for (const k of keys) data[k] = localStorage.getItem(k);
+  const json = JSON.stringify({ app: "gnueg", version: 1, scope, exported: new Date().toISOString(), data }, null, 1);
+  const name = `gnueg-${scope === "foods" ? "lebensmittel" : "backup"}-${todayStr()}.json`;
+  const file = new File([json], name, { type: "application/json" });
+  // iPhone: Teilen-Menü (in Dateien sichern, AirDrop …); sonst normaler Download
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: name }); return; }
+    catch (e) { if (e.name === "AbortError") return; }
+  }
+  const url = URL.createObjectURL(file);
+  const a = document.createElement("a");
+  a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+// Listen zusammenführen: Einträge aus dem Import ersetzen gleichnamige
+function mergeList(oldRaw, newRaw) {
+  let a = [], b = [];
+  try { a = JSON.parse(oldRaw) || []; } catch {}
+  try { b = JSON.parse(newRaw) || []; } catch {}
+  if (!Array.isArray(a) || !Array.isArray(b)) return newRaw;
+  const id = x => (x && typeof x === "object") ? (x.name ?? x.code ?? JSON.stringify(x)) : JSON.stringify(x);
+  const seen = new Set(b.map(id));
+  return JSON.stringify([...b, ...a.filter(x => !seen.has(id(x)))]);
+}
+$("importFile").addEventListener("change", async e => {
+  const f = e.target.files[0];
+  e.target.value = "";
+  if (!f) return;
+  let parsed;
+  try { parsed = JSON.parse(await f.text()); } catch { parsed = null; }
+  const data = parsed && parsed.app === "gnueg" && parsed.data && typeof parsed.data === "object" ? parsed.data : null;
+  const keys = data ? Object.keys(data).filter(k => k.startsWith(DATA_PREFIX) && typeof data[k] === "string") : [];
+  if (!keys.length) {
+    openConfirm({ title: "Import nicht möglich", text: "Die Datei ist kein Gnueg-Backup.", ok: "OK", action: null });
+    return;
+  }
+  const when = parsed.exported ? ` vom ${new Date(parsed.exported).toLocaleDateString("de-CH")}` : "";
+  const foodsOnly = keys.every(k => FOOD_KEYS.includes(k));
+  if (foodsOnly) {
+    let n = 0;
+    try { n = (JSON.parse(data[CUSTOM_KEY] || "[]") || []).length; } catch {}
+    openConfirm({
+      title: "Lebensmittel importieren?",
+      text: `Export${when} mit ${n} ${n === 1 ? "eigenen Eintrag" : "eigenen Lebensmitteln und Rezepten"}. Sie werden zu deinen bestehenden hinzugefügt, gleichnamige werden ersetzt. Deine Tage bleiben unverändert.`,
+      ok: "Importieren",
+      action: () => {
+        try { for (const k of keys) localStorage.setItem(k, mergeList(localStorage.getItem(k), data[k])); } catch {}
+        location.reload();
+      }
+    });
+    return;
+  }
+  const days = keys.filter(k => /^naehrwert-\d{4}-\d{2}-\d{2}$/.test(k)).length;
+  openConfirm({
+    title: "Alle Daten importieren?",
+    text: `Backup${when} mit ${days} ${days === 1 ? "Tag" : "Tagen"}. Deine aktuellen Daten auf diesem Gerät werden dadurch ersetzt.`,
+    ok: "Importieren",
+    action: () => {
+      try {
+        for (const k of allDataKeys()) localStorage.removeItem(k);
+        for (const k of keys) localStorage.setItem(k, data[k]);
+      } catch {}
+      location.reload();
+    }
+  });
+});
 
 render();
 </script>
