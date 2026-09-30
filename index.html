@@ -199,7 +199,7 @@
   /* Tageskarte */
   .daynav { display: flex; align-items: center; gap: 10px; }
   .daylabel { flex: 1; min-width: 0; text-align: center; }
-  .daylabel h2 { margin: 0; font-size: 16px; font-weight: 600; }
+  .daylabel h2 { margin: 0; font-size: 16px; font-weight: 500; font-family: "Inter", -apple-system, BlinkMacSystemFont, system-ui, sans-serif; }
   .navbtn { width: 36px; height: 36px; margin: 0; padding: 0; font-size: 20px; line-height: 1; flex-shrink: 0; border-radius: 50%;
             background: var(--soft); color: var(--text); font-weight: 500; }
   .navbtn:disabled { opacity: .3; cursor: default; }
@@ -340,11 +340,25 @@
   .cell.today { box-shadow: inset 0 0 0 1.5px var(--text); }
   button.cell { width: 16px; height: 16px; }
   button.cell:active { opacity: 1; }
-  .grid-legend { display: flex; flex-wrap: wrap; gap: 8px 14px; font-size: 14px; color: var(--muted); margin-top: 14px; }
-  .grid-legend span { display: inline-flex; align-items: center; gap: 6px; }
-  .grid-legend .cell { cursor: default; width: 12px; height: 12px; border-radius: 3px; }
+  .grid-legend { display: flex; flex-wrap: nowrap; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--muted); margin-top: 12px; white-space: nowrap; }
+  .grid-legend span { display: inline-flex; align-items: center; gap: 4px; }
+  .grid-legend .cell { cursor: default; width: 10px; height: 10px; border-radius: 3px; }
+  .grid-legend + #streak { margin-top: 6px; font-size: 12px; }
   .grid-legend .cell.p-ok::after { inset: 2px; }
   #streak { font-size: 14px; }
+  .card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; cursor: pointer; margin-bottom: 12px; }
+  .card-head h2 { margin: 0; }
+  .toggle-label { font-size: 14px; color: var(--muted); white-space: nowrap; }
+  .toggle-label::after { content: ""; display: inline-block; width: 7px; height: 7px; margin-left: 7px; vertical-align: 2px;
+    border-right: 2px solid var(--faint); border-bottom: 2px solid var(--faint); transform: rotate(45deg); transition: transform .2s; }
+  .card-head[aria-expanded="true"] .toggle-label::after { transform: rotate(-135deg); vertical-align: -1px; }
+  .week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+  .week-day { display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 0; }
+  .week .cell { width: 100%; height: auto; aspect-ratio: 1; border-radius: 8px; }
+  .week .cell.p-ok::after { inset: 32%; }
+  .week-day span { font-size: 12px; color: var(--muted); }
+  .week-day span.is-today { color: var(--text); }
+  .week[hidden] { display: none; }
 
   /* Fragebogen */
   .wizard { position: fixed; inset: 0; z-index: 60; background: var(--bg); overflow-y: auto;
@@ -467,13 +481,16 @@
   </details>
 
   <section class="card">
-    <h2>Übersicht</h2>
-    <div class="grid-wrap"><div id="heatmap"></div></div>
+    <div class="card-head" id="gridToggle" role="button" tabindex="0" aria-expanded="false" aria-controls="gridFull">
+      <h2>Übersicht</h2><span class="toggle-label" id="gridToggleLabel">Alle Wochen</span>
+    </div>
+    <div id="weekStrip" class="week"></div>
+    <div class="grid-wrap" id="gridFull" hidden><div id="heatmap"></div></div>
     <div class="grid-legend">
       <span><i class="cell k-ok"></i>im Ziel</span>
       <span><i class="cell k-under"></i>zu wenig</span>
       <span><i class="cell k-over"></i>zu viel</span>
-      <span><i class="cell k-under p-ok"></i>Protein ✓</span>
+      <span><i class="cell k-under p-ok"></i>Protein erreicht</span>
     </div>
     <div id="streak" class="status"></div>
   </section>
@@ -2004,7 +2021,49 @@ function render() {
 }
 
 // Übersicht wie bei GitHub: Spalten = Wochen (Mo–So), 15 Wochen zurück
+function dayCell(d, st) {
+  const ds = dateStr(d);
+  let cls = "cell", tip = d.toLocaleDateString("de-CH", { weekday: "short", day: "numeric", month: "short" });
+  if (st) {
+    if (st.kcal !== "none") cls += " k-" + st.kcal;
+    if (st.prot) cls += " p-ok";
+    tip += st.t ? ` · ${r(st.tot.kcal)} / ${r(st.t.kcal)} kcal · Protein ${r(st.tot.protein)} / ${r(st.t.protein)} g`
+                : ` · ${r(st.tot.kcal)} kcal`;
+  } else tip += " · nichts erfasst";
+  if (ds === day) cls += " sel";
+  if (ds === todayStr()) cls += " today";
+  return `<button class="${cls}" title="${tip}" aria-label="${tip}" onclick="setDay('${ds}')"></button>`;
+}
+// Übersicht: eingeklappt die letzten 7 Tage, ausgeklappt alle Wochen
+const GRID_OPEN_KEY = "gnueg-uebersicht-offen";
+let gridOpen = false;
+try { gridOpen = localStorage.getItem(GRID_OPEN_KEY) === "1"; } catch {}
+function applyGridOpen() {
+  $("gridToggle").setAttribute("aria-expanded", gridOpen);
+  $("gridToggleLabel").textContent = gridOpen ? "Letzte 7 Tage" : "Alle Wochen";
+  $("gridFull").hidden = !gridOpen;
+  $("weekStrip").hidden = gridOpen;
+  if (gridOpen) { const w = $("gridFull"); w.scrollLeft = w.scrollWidth; }
+}
+function toggleGrid() {
+  gridOpen = !gridOpen;
+  try { localStorage.setItem(GRID_OPEN_KEY, gridOpen ? "1" : "0"); } catch {}
+  applyGridOpen();
+}
+$("gridToggle").addEventListener("click", toggleGrid);
+$("gridToggle").addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleGrid(); } });
+function renderWeekStrip() {
+  const today = new Date(); today.setHours(12, 0, 0, 0);
+  let html = "";
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(today); d.setDate(d.getDate() - i);
+    const label = i === 0 ? "Heute" : d.toLocaleDateString("de-CH", { weekday: "short" }).replace(".", "");
+    html += `<div class="week-day">${dayCell(d, dayStatus(dateStr(d)))}<span class="${i === 0 ? "is-today" : ""}">${label}</span></div>`;
+  }
+  $("weekStrip").innerHTML = html;
+}
 function renderHeatmap() {
+  renderWeekStrip();
   const WEEKS = 15;
   const today = new Date(); today.setHours(12, 0, 0, 0);
   const start = new Date(today);
@@ -2024,21 +2083,12 @@ function renderHeatmap() {
       const ds = dateStr(d);
       if (ds > tStr) { html += `<span class="cell future"></span>`; continue; }
       const st = dayStatus(ds);
-      let cls = "cell", tip = d.toLocaleDateString("de-CH", { weekday: "short", day: "numeric", month: "short" });
-      if (st) {
-        if (st.kcal !== "none") cls += " k-" + st.kcal;
-        if (st.prot) cls += " p-ok";
-        tip += st.t ? ` · ${r(st.tot.kcal)} / ${r(st.t.kcal)} kcal · Protein ${r(st.tot.protein)} / ${r(st.t.protein)} g`
-                    : ` · ${r(st.tot.kcal)} kcal`;
-        if (d >= limit30) { logged30++; if (st.kcal === "ok") ok30++; if (st.prot) prot30++; }
-      } else tip += " · nichts erfasst";
-      if (ds === day) cls += " sel";
-      if (ds === tStr) cls += " today";
-      html += `<button class="${cls}" title="${tip}" aria-label="${tip}" onclick="setDay('${ds}')"></button>`;
+      if (st && d >= limit30) { logged30++; if (st.kcal === "ok") ok30++; if (st.prot) prot30++; }
+      html += dayCell(d, st);
     }
   }
   $("heatmap").innerHTML = html + "</div>";
-  const wrap = document.querySelector(".grid-wrap"); wrap.scrollLeft = wrap.scrollWidth;
+  applyGridOpen();
   $("streak").textContent = logged30
     ? `30 Tage: Kalorien ${ok30}×, Protein ${prot30}× im Ziel`
     : "";
