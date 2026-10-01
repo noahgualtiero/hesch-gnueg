@@ -391,6 +391,9 @@
                       box-shadow: 0 0 0 1px rgba(0, 0, 0, .2); }
   .cell.sel { outline: 2px solid var(--text); outline-offset: 1px; }
   .cell.today { box-shadow: inset 0 0 0 1.5px var(--text); }
+  /* Heute: grün, wenn prozentual klar mehr Protein- als Kalorienziel erreicht ist, rot im umgekehrten Fall, sonst weiss */
+  .cell.today.t-good { box-shadow: inset 0 0 0 2px #34C759; }
+  .cell.today.t-bad { box-shadow: inset 0 0 0 2px var(--danger); }
   button.cell { width: 16px; height: 16px; }
   button.cell:active { opacity: 1; }
   .grid-legend { display: flex; flex-wrap: nowrap; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--muted); margin-top: 12px; white-space: nowrap; }
@@ -2352,7 +2355,16 @@ function dayCell(d, st) {
                 : ` · ${r(st.tot.kcal)} kcal`;
   } else tip += " · nichts erfasst";
   if (ds === day) cls += " sel";
-  if (ds === todayStr()) cls += " today";
+  if (ds === todayStr()) {
+    cls += " today";
+    if (st && st.t && st.t.kcal > 0 && st.t.protein > 0) {
+      const pPct = st.tot.protein / st.t.protein, kPct = st.tot.kcal / st.t.kcal;
+      // ±5 Prozentpunkte gelten als ausgeglichen und bleiben weiss
+      const diff = pPct - kPct;
+      if (Math.abs(diff) > 0.05) cls += diff > 0 ? " t-good" : " t-bad";
+      tip += ` · Protein ${Math.round(pPct * 100)} % vs. Kalorien ${Math.round(kPct * 100)} %`;
+    }
+  }
   return `<button class="${cls}" title="${tip}" aria-label="${tip}" onclick="setDay('${ds}')"></button>`;
 }
 // Übersicht: eingeklappt die letzten 7 Tage, ausgeklappt alle Wochen
