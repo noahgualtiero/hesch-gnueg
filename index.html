@@ -394,6 +394,9 @@
   .week .cell.p-ok::after { inset: 32%; }
   .week-day span { font-size: 12px; color: var(--muted); }
   .week[hidden] { display: none; }
+  .sport-bar { width: 100%; height: 18px; display: flex; align-items: flex-end; justify-content: center; border-bottom: .5px solid var(--line); }
+  .sport-bar i { display: block; width: 36%; min-height: 2px; border-radius: 2px 2px 0 0; background: var(--muted); }
+  .sport-key { display: inline-block; width: 4px; height: 10px; border-radius: 1px; background: var(--muted); }
 
   /* Fragebogen */
   .wizard { position: fixed; inset: 0; z-index: 60; background: var(--bg); overflow-y: auto;
@@ -525,7 +528,8 @@
       <span><i class="cell k-ok"></i>im Ziel</span>
       <span><i class="cell k-under"></i>zu wenig</span>
       <span><i class="cell k-over"></i>zu viel</span>
-      <span><i class="cell k-under p-ok"></i>Protein erreicht</span>
+      <span><i class="cell k-under p-ok"></i>Protein ✓</span>
+      <span id="sportLegend" hidden><i class="sport-key"></i>Sport</span>
     </div>
     <div id="streak" class="status"></div>
     <div id="macroTrend" class="status"></div>
@@ -2167,6 +2171,8 @@ function applyGridOpen() {
   $("gridFull").hidden = !gridOpen;
   $("weekStrip").hidden = gridOpen;
   if (gridOpen) { const w = $("gridFull"); w.scrollLeft = w.scrollWidth; }
+  if ($("sportLegend")) $("sportLegend").hidden = gridOpen || !$("weekStrip").querySelector(".sport-bar i");
+  if (typeof renderStats === "function" && $("streak")) renderStats();
 }
 function toggleGrid() {
   gridOpen = !gridOpen;
@@ -2177,13 +2183,24 @@ $("gridToggle").addEventListener("click", toggleGrid);
 $("gridToggle").addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleGrid(); } });
 function renderWeekStrip() {
   const today = new Date(); today.setHours(12, 0, 0, 0);
-  let html = "";
+  const days = [];
   for (let i = 6; i >= 0; i--) {
     const d = new Date(today); d.setDate(d.getDate() - i);
+    const ds = dateStr(d);
+    days.push({ d, i, sport: sportKcal(ds === day ? entries : load(ds)) });
+  }
+  // Sport pro Tag als Balken, Höhe relativ zum stärksten Tag der Woche
+  const max = Math.max(...days.map(x => x.sport));
+  let html = "";
+  for (const { d, i, sport } of days) {
     const label = i === 0 ? "Heute" : d.toLocaleDateString("de-CH", { weekday: "short" }).replace(".", "");
-    html += `<div class="week-day">${dayCell(d, dayStatus(dateStr(d)))}<span class="${i === 0 ? "is-today" : ""}">${label}</span></div>`;
+    const h = max > 0 && sport > 0 ? Math.max(12, sport / max * 100) : 0;
+    html += `<div class="week-day">${dayCell(d, dayStatus(dateStr(d)))}
+      <div class="sport-bar" title="${sport ? r(sport) + " kcal Sport" : "kein Sport"}">${h ? `<i style="height:${h}%"></i>` : ""}</div>
+      <span>${label}</span></div>`;
   }
   $("weekStrip").innerHTML = html;
+  $("sportLegend").hidden = !(max > 0) || gridOpen;
 }
 function renderHeatmap() {
   renderWeekStrip();
@@ -2212,30 +2229,43 @@ function renderHeatmap() {
   }
   $("heatmap").innerHTML = html + "</div>";
   applyGridOpen();
-  $("streak").textContent = logged30
-    ? `30 Tage: Kalorien ${ok30}×, Protein ${prot30}× im Ziel`
-    : "";
-  renderMacroTrend();
+  renderStats();
+}
+// Zielerreichung und Makros: eingeklappt 7 Tage (Trend gegen die 7 Tage davor), ausgeklappt 30 Tage (Trend: letzte 7 Tage)
+function renderStats() {
+  const n = gridOpen ? 30 : 7;
+  const today = new Date(); today.setHours(12, 0, 0, 0);
+  let ok = 0, prot = 0, logged = 0;
+  for (let i = 0; i < n; i++) {
+    const d = new Date(today); d.setDate(d.getDate() - i);
+    const st = dayStatus(dateStr(d));
+    if (st) { logged++; if (st.kcal === "ok") ok++; if (st.prot) prot++; }
+  }
+  $("streak").textContent = logged ? `${n} Tage: Kalorien ${ok}×, Protein ${prot}× im Ziel` : "";
+  renderMacroTrend(n);
 }
 // Makro-Verteilung (Anteil an den kcal) über 30 Tage, Pfeil = letzte 7 Tage im Vergleich zu den 30 Tagen
-function renderMacroTrend() {
+function renderMacroTrend(n) {
   const today = new Date(); today.setHours(12, 0, 0, 0);
   const add = (a, l) => { for (const e of l) if (e.kind !== "sport") { a.protein += e.protein || 0; a.carbs += e.carbs || 0; a.fat += e.fat || 0; } };
-  const all = { protein: 0, carbs: 0, fat: 0 }, week = { protein: 0, carbs: 0, fat: 0 };
-  let days = 0, weekDays = 0;
-  for (let i = 0; i < 30; i++) {
+  // Zeitraum A (angezeigt) und Vergleich B: bei 7 Tagen die 7 Tage davor, bei 30 Tagen die letzten 7 Tage
+  const zero = () => ({ protein: 0, carbs: 0, fat: 0, days: 0 });
+  const main = zero(), cmp = zero();
+  for (let i = 0; i < (n === 7 ? 14 : 30); i++) {
     const d = new Date(today); d.setDate(d.getDate() - i);
     const ds = dateStr(d), l = ds === day ? entries : load(ds);
     if (!l.some(e => e.kind !== "sport")) continue;
-    days++; add(all, l);
-    if (i < 7) { weekDays++; add(week, l); }
+    if (i < n) { main.days++; add(main, l); }
+    if (n === 7 ? i >= 7 : i < 7) { cmp.days++; add(cmp, l); }
   }
-  const s = days >= 2 ? split(all) : null;
+  const s = main.days >= 2 ? split(main) : null;
   if (!s) { $("macroTrend").innerHTML = ""; return; }
-  const w = weekDays >= 2 && days > weekDays ? split(week) : null;
+  const c = cmp.days >= 2 && (n === 7 || main.days > cmp.days) ? split(cmp) : null;
+  // Pfeil = Veränderung: 7 Tage gegenüber den 7 Tagen davor bzw. letzte 7 Tage gegenüber 30 Tagen
+  const w = c && (n === 7 ? s : c), base = c && (n === 7 ? c : s);
   const trend = k => {
     if (!w) return "";
-    const diff = w[k] - s[k];
+    const diff = w[k] - base[k];
     return Math.abs(diff) < 2 ? "" : diff > 0 ? "\u00a0↑" : "\u00a0↓";
   };
   const nb = "\u00a0";
