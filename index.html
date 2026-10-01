@@ -377,6 +377,15 @@
   .grid-legend { display: flex; flex-wrap: nowrap; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--muted); margin-top: 12px; white-space: nowrap; }
   .grid-legend span { display: inline-flex; align-items: center; gap: 4px; }
   .grid-legend .cell { cursor: default; width: 10px; height: 10px; border-radius: 3px; }
+  .trend { margin-top: 12px; }
+  .trend-head { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .trend .macro-line { height: 6px; }
+  .trend-legend { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 8px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .trend-legend span { display: flex; align-items: center; gap: 4px; }
+  .trend-legend div div { margin-top: 1px; font-size: 14px; }
+  .trend-legend .dot { width: 7px; height: 7px; }
+  .trend-legend b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .trend-legend em { font-style: normal; margin-left: 2px; font-variant-numeric: tabular-nums; }
   .grid-legend + #streak { margin-top: 6px; font-size: 12px; }
   .grid-legend .cell.p-ok::after { inset: 2px; }
   #streak { font-size: 14px; }
@@ -526,6 +535,7 @@
       <span><i class="cell k-under p-ok"></i>Protein erreicht</span>
     </div>
     <div id="streak" class="status"></div>
+    <div id="macroTrend"></div>
   </section>
 
 
@@ -2212,6 +2222,36 @@ function renderHeatmap() {
   $("streak").textContent = logged30
     ? `30 Tage: Kalorien ${ok30}×, Protein ${prot30}× im Ziel`
     : "";
+  renderMacroTrend();
+}
+// Makro-Verteilung (Anteil an den kcal) über 30 Tage, Pfeil = letzte 7 Tage im Vergleich zu den 30 Tagen
+function renderMacroTrend() {
+  const today = new Date(); today.setHours(12, 0, 0, 0);
+  const add = (a, l) => { for (const e of l) if (e.kind !== "sport") { a.protein += e.protein || 0; a.carbs += e.carbs || 0; a.fat += e.fat || 0; } };
+  const all = { protein: 0, carbs: 0, fat: 0 }, week = { protein: 0, carbs: 0, fat: 0 };
+  let days = 0, weekDays = 0;
+  for (let i = 0; i < 30; i++) {
+    const d = new Date(today); d.setDate(d.getDate() - i);
+    const ds = dateStr(d), l = ds === day ? entries : load(ds);
+    if (!l.some(e => e.kind !== "sport")) continue;
+    days++; add(all, l);
+    if (i < 7) { weekDays++; add(week, l); }
+  }
+  const s = days >= 2 ? split(all) : null;
+  if (!s) { $("macroTrend").innerHTML = ""; return; }
+  const w = weekDays >= 2 && days > weekDays ? split(week) : null;
+  const trend = k => {
+    if (!w) return "";
+    const diff = w[k] - s[k];
+    if (Math.abs(diff) < 2) return `<em class="tr-flat" title="stabil">→</em>`;
+    return `<em title="letzte 7 Tage ${r(w[k])} %">${diff > 0 ? "↑" : "↓"}${r(Math.abs(diff))}</em>`;
+  };
+  const item = (k, label) => `<div><span><i class="dot" style="background:${COLORS[k]}"></i>${label}</span><div><b>${r(s[k])} %</b> ${trend(k)}</div></div>`;
+  $("macroTrend").innerHTML = `<div class="trend">
+      <div class="trend-head">Verteilung 30 Tage${w ? " · Pfeil: letzte 7 Tage" : ""}</div>
+      <div class="macro-line" aria-hidden="true"><span style="width:${s.protein}%;background:${COLORS.protein}"></span>
+        <span style="width:${s.carbs}%;background:${COLORS.carbs}"></span><span style="width:${s.fat}%;background:${COLORS.fat}"></span></div>
+      <div class="trend-legend">${item("protein", "Protein")}${item("carbs", "Kohlenhydrate")}${item("fat", "Fett")}</div></div>`;
 }
 
 function num(v) { const n = parseFloat(v); return isNaN(n) ? 0 : n; }
