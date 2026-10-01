@@ -254,6 +254,20 @@
   .addrow .addbtn { margin: 0; }
   .addbtn { font-size: 16px; font-weight: 600; padding: 14px 10px; border-radius: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .addbtn.sport { flex: 0 0 34%; background: var(--soft); color: var(--text); }
+  .meal-pick { margin: 0; }
+  .meal-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin: 18px 0 2px;
+               padding-bottom: 6px; border-bottom: .5px solid var(--line); }
+  .meal-head:first-child { margin-top: 0; }
+  .meal-head h3 { margin: 0; font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: .02em; color: var(--muted); }
+  .meal-head .meal-sum { font-size: 12px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .meal-head .meal-sum b { color: var(--text); font-weight: 600; }
+  .meal-head .dens::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+                             background: var(--faint); margin: 0 4px 0 2px; vertical-align: 1px; }
+  .meal-head .dens.good::before { background: var(--good); }
+  .meal-head .dens.bad::before { background: var(--cell-over); }
+  .meal-head .dens.good, .meal-head .dens.bad { color: var(--muted); font-weight: 400; }
+  .meal-head + .entry { border-top: 0; }
+  .entry-meal { margin: 14px 0 0; }
   .backfill { display: block; margin: 12px auto 0; font-size: 14px; color: var(--muted); }
   #toast { text-align: center; color: var(--good); font-weight: 500; font-size: 14px; min-height: 0; margin: 10px 0 0; }
   #toast:empty { display: none; }
@@ -653,6 +667,8 @@
           <input type="number" id="count" min="0.25" step="0.25" value="1">
         </div>
       </div>
+      <label>Mahlzeit</label>
+      <div class="segmented meal-pick" id="mealPick" role="group" aria-label="Mahlzeit"></div>
       <button id="addBtn">Hinzufügen</button>
     </div>
   <div id="recipeStep" hidden>
@@ -1603,7 +1619,7 @@ $("addBtn").addEventListener("click", () => {
   if (grams <= 0) return;
   const f = grams / 100;
   entries.push({
-    id: Date.now(), time: new Date().toISOString(), name: current.name, grams,
+    id: Date.now(), time: new Date().toISOString(), meal: pickedMeal, name: current.name, grams,
     kcal: current.kcal * f, protein: current.protein * f, carbs: current.carbs * f, fat: current.fat * f
   });
   rememberUsed(current, parseFloat($("portion").value) || current.portion || 100);
@@ -1671,6 +1687,7 @@ function showToast(msg) {
   toastTimer = setTimeout(() => { $("toast").textContent = ""; }, 4000);
 }
 function showStep(step) {
+  if (step === "add") { pickedMeal = mealForTime(new Date()); renderMealPick($("mealPick"), pickedMeal); }
   $("captureStep").hidden = step !== "capture";
   $("addCard").hidden = step !== "add";
   $("createStep").hidden = step !== "create";
@@ -1793,7 +1810,16 @@ function openEntry(id) {
       <div class="nutri"><div class="nutri-head"><span></span><b>Gegessen</b><em>pro 100 g</em></div>
         ${row("Kalorien", e.kcal, "kcal", true)}${row("Protein", e.protein, "g")}${row("Kohlenhydrate", e.carbs, "g")}${row("Fett", e.fat, "g")}
         <div class="nutri-dens"><span>Protein-Dichte</span><b class="dens ${densClass(d)}">${fmtDensity(d)} g pro 100 kcal</b></div>
-      </div>`;
+      </div>
+      <div class="segmented entry-meal" id="entryMeal" role="group" aria-label="Mahlzeit"></div>`;
+    renderMealPick($("entryMeal"), mealOf(e));
+    $("entryMeal").onclick = ev => {
+      const b = ev.target.closest("button[data-meal]");
+      if (!b) return;
+      e.meal = b.dataset.meal;
+      renderMealPick($("entryMeal"), e.meal);
+      save(); render();
+    };
   }
   $("entryDelete").hidden = !(day === todayStr() || backfill);
   $("entrySheet").hidden = false;
@@ -1903,6 +1929,27 @@ function progress(label, value, target, unit, color, mustReach, extra = "") {
 
 // Protein-Dichte: Gramm Protein pro 100 kcal
 const density = e => e.kcal > 0 ? e.protein / e.kcal * 100 : 0;
+// Mahlzeiten: Standard nach Uhrzeit, bei alten Einträgen ohne Angabe ebenfalls aus der Uhrzeit abgeleitet
+const MEALS = [["breakfast", "Frühstück"], ["lunch", "Mittagessen"], ["dinner", "Abendessen"], ["snack", "Snack"]];
+const MEAL_SHORT = { breakfast: "Frühstück", lunch: "Mittag", dinner: "Abend", snack: "Snack" };
+function mealForTime(d) {
+  const m = d.getHours() * 60 + d.getMinutes();
+  if (m >= 300 && m < 630) return "breakfast";
+  if (m >= 660 && m < 870) return "lunch";
+  if (m >= 1050 && m < 1290) return "dinner";
+  return "snack";
+}
+const mealOf = e => e.meal || mealForTime(new Date(e.time || Date.now()));
+let pickedMeal = "snack";
+function renderMealPick(sel, current) {
+  sel.innerHTML = MEALS.map(([k]) => `<button type="button" data-meal="${k}" aria-pressed="${k === current}">${MEAL_SHORT[k]}</button>`).join("");
+}
+$("mealPick").addEventListener("click", e => {
+  const b = e.target.closest("button[data-meal]");
+  if (!b) return;
+  pickedMeal = b.dataset.meal;
+  renderMealPick($("mealPick"), pickedMeal);
+});
 // Bewertung: ab 10 g sehr gut (grün), unter 4 g wenig (rot), dazwischen neutral
 const densClass = v => v >= 10 ? "good" : v < 4 ? "bad" : "";
 const fmtDensity = v => v.toLocaleString("de-CH", { maximumFractionDigits: 1 });
@@ -2003,17 +2050,28 @@ function render() {
   document.querySelectorAll("#sortBar button").forEach(b => b.setAttribute("aria-pressed", b.dataset.sort === sortMode));
   $("sortBar").hidden = entries.filter(food).length < 2;
   $("densLegend").hidden = !entries.some(food);
-  $("meals").innerHTML = list.length
-    ? list.map(e => `<div class="entry" role="button" tabindex="0" data-id="${e.id}">${e.kind === "sport"
+  const entryHtml = e => `<div class="entry" role="button" tabindex="0" data-id="${e.id}">${e.kind === "sport"
           ? `<div class="e-main"><div class="e-name">${esc(e.name)}</div>
-               <div class="e-meta"><span class="tag">Sport</span>${r(e.minutes)} min · ${fmtTime(e.time)}</div></div>
+               <div class="e-meta">${r(e.minutes)} min · ${fmtTime(e.time)}</div></div>
              <div class="e-side"><div class="e-kcal sport">+${r(e.kcal)} kcal</div></div>`
           : `<div class="e-main"><div class="e-name">${esc(e.name)}</div>
                <div class="e-meta">${r(e.grams)} g · ${fmtTime(e.time)}</div></div>
              <div class="e-side"><div class="e-kcal">${r(e.kcal)} kcal</div>
                <div class="dens ${densClass(density(e))}" title="${fmtDensity(density(e))} g Protein pro 100 kcal">P ${fmtDensity(density(e))}</div></div>`}
-        <span class="chev" aria-hidden="true"></span></div>`).join("")
-    : '<p class="empty">Noch nichts erfasst.</p>';
+        <span class="chev" aria-hidden="true"></span></div>`;
+  // Nach Mahlzeit gruppiert, mit Summe pro Mahlzeit; Sport am Schluss
+  let mealsHtml = "";
+  for (const [k, label] of MEALS) {
+    const items = list.filter(e => food(e) && mealOf(e) === k);
+    if (!items.length) continue;
+    const s = sum(items), d = density(s);
+    mealsHtml += `<div class="meal-head"><h3>${label}</h3><span class="meal-sum"><b>${r(s.kcal)} kcal</b> · ${r(s.protein)} g Protein ·
+      <span class="dens ${densClass(d)}">P ${fmtDensity(d)}</span></span></div>` + items.map(entryHtml).join("");
+  }
+  const sport = list.filter(e => !food(e));
+  if (sport.length) mealsHtml += `<div class="meal-head"><h3>Sport</h3><span class="meal-sum"><b>+${r(sport.reduce((a, e) => a + e.kcal, 0))} kcal</b></span></div>`
+    + sport.map(entryHtml).join("");
+  $("meals").innerHTML = mealsHtml || '<p class="empty">Noch nichts erfasst.</p>';
   renderHeatmap();
 }
 
