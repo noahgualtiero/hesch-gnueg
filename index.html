@@ -255,18 +255,17 @@
   .addbtn { font-size: 16px; font-weight: 600; padding: 14px 10px; border-radius: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .addbtn.sport { flex: 0 0 34%; background: var(--soft); color: var(--text); }
   .meal-pick { margin: 0; }
-  .meal-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin: 18px 0 2px;
-               padding-bottom: 6px; border-bottom: .5px solid var(--line); }
-  .meal-head:first-child { margin-top: 0; }
-  .meal-head h3 { margin: 0; font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: .02em; color: var(--muted); }
-  .meal-head .meal-sum { font-size: 12px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
-  .meal-head .meal-sum b { color: var(--text); font-weight: 600; }
-  .meal-head .dens::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%;
-                             background: var(--faint); margin: 0 4px 0 2px; vertical-align: 1px; }
-  .meal-head .dens.good::before { background: var(--good); }
-  .meal-head .dens.bad::before { background: var(--cell-over); }
-  .meal-head .dens.good, .meal-head .dens.bad { color: var(--muted); font-weight: 400; }
-  .meal-head + .entry { border-top: 0; }
+  .meal-filter button { font-size: 12px; padding: 6px 2px; }
+  .meal-table { width: 100%; border-collapse: collapse; margin: -6px 0 14px; font-size: 14px; font-variant-numeric: tabular-nums; }
+  .meal-table th, .meal-table td { padding: 7px 0; text-align: right; font-weight: 400; border-bottom: .5px solid var(--line); }
+  .meal-table th:first-child { text-align: left; }
+  .meal-table thead th { font-size: 12px; color: var(--muted); padding-top: 0; }
+  .meal-table tr.total th, .meal-table tr.total td { font-weight: 600; border-bottom: 0; }
+  .meal-table .dens::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+                              background: var(--faint); margin-right: 5px; vertical-align: 1px; }
+  .meal-table .dens.good::before { background: var(--good); }
+  .meal-table .dens.bad::before { background: var(--cell-over); }
+  .meal-table .dens.good, .meal-table .dens.bad { color: inherit; font-weight: inherit; }
   .entry-meal { margin: 14px 0 0; }
   .backfill { display: block; margin: 12px auto 0; font-size: 14px; color: var(--muted); }
   #toast { text-align: center; color: var(--good); font-weight: 500; font-size: 14px; min-height: 0; margin: 10px 0 0; }
@@ -528,9 +527,8 @@
 
   <section class="card">
     <h2 id="mealsTitle">Heute gegessen</h2>
-    <div class="segmented" id="sortBar" role="group" aria-label="Sortieren nach">
-      <button data-sort="time">Zeit</button><button data-sort="density">Protein/kcal</button><button data-sort="kcal">kcal</button>
-    </div>
+    <div class="segmented meal-filter" id="mealFilter" role="group" aria-label="Mahlzeit anzeigen"></div>
+    <div id="mealTable"></div>
     <div id="meals"></div>
     <p class="dens-legend" id="densLegend"><span>P = g Protein pro 100 kcal</span> · <span><i class="good"></i>ab 10 sehr gut</span> · <span><i class="bad"></i>unter 4 wenig</span></p>
   </section>
@@ -1953,13 +1951,12 @@ $("mealPick").addEventListener("click", e => {
 // Bewertung: ab 10 g sehr gut (grün), unter 4 g wenig (rot), dazwischen neutral
 const densClass = v => v >= 10 ? "good" : v < 4 ? "bad" : "";
 const fmtDensity = v => v.toLocaleString("de-CH", { maximumFractionDigits: 1 });
-let sortMode = "time";
-try { sortMode = localStorage.getItem("naehrwert-sortierung") || "time"; } catch {}
-$("sortBar").addEventListener("click", e => {
-  const b = e.target.closest("button[data-sort]");
+// Filter der erfassten Lebensmittel: alle oder eine Mahlzeit
+let mealFilter = "all";
+$("mealFilter").addEventListener("click", e => {
+  const b = e.target.closest("button[data-f]");
   if (!b) return;
-  sortMode = b.dataset.sort;
-  try { localStorage.setItem("naehrwert-sortierung", sortMode); } catch {}
+  mealFilter = b.dataset.f;
   render();
 });
 
@@ -2041,37 +2038,39 @@ function render() {
 
   const byTime = (x, y) => (x.time || "").localeCompare(y.time || "");
   const food = e => e.kind !== "sport";
-  const list = [...entries].sort((x, y) => {
-    if (sortMode === "time") return byTime(x, y);
-    if (food(x) !== food(y)) return food(x) ? -1 : 1; // Sport ans Ende
-    const v = e => sortMode === "density" ? density(e) : e.kcal;
-    return v(y) - v(x) || byTime(x, y);
-  });
-  document.querySelectorAll("#sortBar button").forEach(b => b.setAttribute("aria-pressed", b.dataset.sort === sortMode));
-  $("sortBar").hidden = entries.filter(food).length < 2;
-  $("densLegend").hidden = !entries.some(food);
+  const list = [...entries].sort(byTime);
+  const foods = list.filter(food);
+  $("densLegend").hidden = !foods.length;
+  // Filter: Alle + nur Mahlzeiten mit Einträgen
+  const present = MEALS.filter(([k]) => foods.some(e => mealOf(e) === k));
+  if (mealFilter !== "all" && !present.some(([k]) => k === mealFilter)) mealFilter = "all";
+  $("mealFilter").hidden = present.length < 2;
+  $("mealFilter").innerHTML = [["all", "Alle"], ...present.map(([k]) => [k, MEAL_SHORT[k]])]
+    .map(([k, l]) => `<button data-f="${k}" aria-pressed="${k === mealFilter}">${l}</button>`).join("");
+  // Summentabelle: pro Mahlzeit und Total (bei einer Mahlzeit nur deren Zeile)
+  const sumRow = (label, items, cls = "") => {
+    const s = sum(items), d = density(s);
+    return `<tr class="${cls}"><th>${label}</th><td>${r(s.kcal)}</td><td>${r(s.protein)} g</td>
+      <td><span class="dens ${densClass(d)}">${fmtDensity(d)}</span></td></tr>`;
+  };
+  let rows = "";
+  if (mealFilter === "all") {
+    for (const [k, label] of present) rows += sumRow(label, foods.filter(e => mealOf(e) === k));
+    if (present.length > 1) rows += sumRow("Total", foods, "total");
+  } else rows = sumRow(MEALS.find(([k]) => k === mealFilter)[1], foods.filter(e => mealOf(e) === mealFilter));
+  $("mealTable").innerHTML = foods.length ? `<table class="meal-table">
+      <thead><tr><th></th><th>kcal</th><th>Protein</th><th>P/100 kcal</th></tr></thead><tbody>${rows}</tbody></table>` : "";
   const entryHtml = e => `<div class="entry" role="button" tabindex="0" data-id="${e.id}">${e.kind === "sport"
           ? `<div class="e-main"><div class="e-name">${esc(e.name)}</div>
-               <div class="e-meta">${r(e.minutes)} min · ${fmtTime(e.time)}</div></div>
+               <div class="e-meta"><span class="tag">Sport</span>${r(e.minutes)} min · ${fmtTime(e.time)}</div></div>
              <div class="e-side"><div class="e-kcal sport">+${r(e.kcal)} kcal</div></div>`
           : `<div class="e-main"><div class="e-name">${esc(e.name)}</div>
-               <div class="e-meta">${r(e.grams)} g · ${fmtTime(e.time)}</div></div>
+               <div class="e-meta">${mealFilter === "all" ? MEAL_SHORT[mealOf(e)] + " · " : ""}${r(e.grams)} g · ${fmtTime(e.time)}</div></div>
              <div class="e-side"><div class="e-kcal">${r(e.kcal)} kcal</div>
                <div class="dens ${densClass(density(e))}" title="${fmtDensity(density(e))} g Protein pro 100 kcal">P ${fmtDensity(density(e))}</div></div>`}
         <span class="chev" aria-hidden="true"></span></div>`;
-  // Nach Mahlzeit gruppiert, mit Summe pro Mahlzeit; Sport am Schluss
-  let mealsHtml = "";
-  for (const [k, label] of MEALS) {
-    const items = list.filter(e => food(e) && mealOf(e) === k);
-    if (!items.length) continue;
-    const s = sum(items), d = density(s);
-    mealsHtml += `<div class="meal-head"><h3>${label}</h3><span class="meal-sum"><b>${r(s.kcal)} kcal</b> · ${r(s.protein)} g Protein ·
-      <span class="dens ${densClass(d)}">P ${fmtDensity(d)}</span></span></div>` + items.map(entryHtml).join("");
-  }
-  const sport = list.filter(e => !food(e));
-  if (sport.length) mealsHtml += `<div class="meal-head"><h3>Sport</h3><span class="meal-sum"><b>+${r(sport.reduce((a, e) => a + e.kcal, 0))} kcal</b></span></div>`
-    + sport.map(entryHtml).join("");
-  $("meals").innerHTML = mealsHtml || '<p class="empty">Noch nichts erfasst.</p>';
+  const shown = mealFilter === "all" ? list : foods.filter(e => mealOf(e) === mealFilter);
+  $("meals").innerHTML = shown.length ? shown.map(entryHtml).join("") : '<p class="empty">Noch nichts erfasst.</p>';
   renderHeatmap();
 }
 
