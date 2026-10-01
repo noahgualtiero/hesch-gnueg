@@ -174,6 +174,10 @@
   .favbtn { width: 40px; height: 40px; margin: 0; padding: 0; border-radius: 50%; background: var(--soft); color: var(--muted);
             font-size: 20px; line-height: 1; flex-shrink: 0; }
   .favbtn[aria-pressed="true"] { color: var(--accent); background: var(--accent-soft); }
+  .q-macros { margin-top: 16px; }
+  .q-macros .entry-amount label { flex-basis: 130px; }
+  .q-macros .entry-amount input { background: var(--field); }
+  .q-kcal { margin: 14px 0 0; font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
   .quick-link { display: block; margin: 18px auto 0; }
   .linkbtn.newfood { display: block; margin: 22px auto 0; font-size: 14px; color: var(--muted); text-align: center; }
   .create-mode { margin: 0 0 4px; }
@@ -770,14 +774,12 @@
   <div id="quickStep" hidden>
       <label for="qName">Bezeichnung (optional)</label>
       <input type="text" id="qName" maxlength="60" placeholder="z. B. Mittagessen Kantine">
-      <div class="row">
-        <div><label for="qKcal">Kalorien (kcal)</label><input type="text" inputmode="decimal" id="qKcal" placeholder="leer = berechnet"></div>
-        <div><label for="qProtein">Protein (g)</label><input type="text" inputmode="decimal" id="qProtein"></div>
+      <div class="q-macros">
+        <div class="entry-amount"><label for="qProtein">Protein</label><input type="text" inputmode="decimal" id="qProtein"><span>g</span></div>
+        <div class="entry-amount"><label for="qCarbs">Kohlenhydrate</label><input type="text" inputmode="decimal" id="qCarbs"><span>g</span></div>
+        <div class="entry-amount"><label for="qFat">Fett</label><input type="text" inputmode="decimal" id="qFat"><span>g</span></div>
       </div>
-      <div class="row">
-        <div><label for="qCarbs">Kohlenhydrate (g)</label><input type="text" inputmode="decimal" id="qCarbs"></div>
-        <div><label for="qFat">Fett (g)</label><input type="text" inputmode="decimal" id="qFat"></div>
-      </div>
+      <p class="q-kcal" id="qKcal">0 kcal</p>
       <label>Mahlzeit</label>
       <div class="segmented meal-pick" id="qMeal" role="group" aria-label="Mahlzeit"></div>
       <div id="qStatus" class="status"></div>
@@ -1808,22 +1810,25 @@ $("headBack").addEventListener("click", () => {
 // Makros direkt eingeben: Eintrag ohne Lebensmittel und ohne Gewicht
 let quickMeal = "snack";
 $("quickBtn").addEventListener("click", () => {
-  for (const id of ["qName", "qKcal", "qProtein", "qCarbs", "qFat"]) $(id).value = "";
-  $("qStatus").textContent = "";
+  for (const id of ["qName", "qProtein", "qCarbs", "qFat"]) $(id).value = "";
+  $("qStatus").textContent = ""; updateQuickKcal();
   quickMeal = mealForTime(new Date()); renderMealPick($("qMeal"), quickMeal);
   showStep("quick");
-  $("qKcal").focus();
+  $("qProtein").focus();
 });
+// Kalorien immer aus den Makros: 4 kcal pro g Protein und Kohlenhydrate, 9 kcal pro g Fett
+const macroKcal = (p, c, f) => p * 4 + c * 4 + f * 9;
+const qVal = id => Math.max(0, parseFloat(String($(id).value).replace(",", ".")) || 0);
+function updateQuickKcal() { $("qKcal").textContent = `${r(macroKcal(qVal("qProtein"), qVal("qCarbs"), qVal("qFat")))} kcal`; }
+for (const id of ["qProtein", "qCarbs", "qFat"]) $(id).addEventListener("input", updateQuickKcal);
 $("qMeal").addEventListener("click", e => {
   const b = e.target.closest("button[data-meal]");
   if (b) { quickMeal = b.dataset.meal; renderMealPick($("qMeal"), quickMeal); }
 });
 $("qAdd").addEventListener("click", () => {
-  const v = id => Math.max(0, parseFloat(String($(id).value).replace(",", ".")) || 0);
-  let kcal = v("qKcal");
-  const protein = v("qProtein"), carbs = v("qCarbs"), fat = v("qFat");
-  if (!kcal) kcal = protein * 4 + carbs * 4 + fat * 9; // ohne kcal-Angabe aus den Makros berechnen
-  if (!kcal) { $("qStatus").textContent = "Bitte mindestens Kalorien oder Makros eingeben."; $("qStatus").className = "status error"; return; }
+  const protein = qVal("qProtein"), carbs = qVal("qCarbs"), fat = qVal("qFat");
+  const kcal = macroKcal(protein, carbs, fat);
+  if (!kcal) { $("qStatus").textContent = "Bitte mindestens einen Makro-Wert eingeben."; $("qStatus").className = "status error"; return; }
   const name = $("qName").value.trim() || "Direkt eingegeben";
   entries.push({ id: Date.now(), time: new Date().toISOString(), meal: quickMeal, quick: true, name, grams: 0, kcal, protein, carbs, fat });
   save(); render(); closeSheet();
@@ -1931,7 +1936,7 @@ function openEntry(id, keepFocus = false) {
         <div class="nutri-dens"><span>Protein-Dichte</span><b class="dens ${densClass(d)}">${fmtDensity(d)} g pro 100 kcal</b></div>
       </div>
       <div class="entry-edit" id="entryEdit" hidden>
-        ${e.quick ? qIn("eqKcal", "Kalorien", e.kcal, "kcal") + qIn("eqProtein", "Protein", e.protein, "g") + qIn("eqCarbs", "Kohlenhydrate", e.carbs, "g") + qIn("eqFat", "Fett", e.fat, "g")
+        ${e.quick ? qIn("eqProtein", "Protein", e.protein, "g") + qIn("eqCarbs", "Kohlenhydrate", e.carbs, "g") + qIn("eqFat", "Fett", e.fat, "g")
           : `<div class="entry-amount"><label for="entryGrams">Menge</label>
           <input type="text" inputmode="decimal" id="entryGrams" value="${r(e.grams)}"><span>g</span></div>`}
         <div class="segmented entry-meal" id="entryMeal" role="group" aria-label="Mahlzeit"></div>
@@ -1952,8 +1957,9 @@ function openEntry(id, keepFocus = false) {
     $("entryEditSave").onclick = () => {
       if (e.quick) {
         const q = id => parseFloat($(id).value.replace(",", "."));
-        for (const [k, id] of [["kcal", "eqKcal"], ["protein", "eqProtein"], ["carbs", "eqCarbs"], ["fat", "eqFat"]])
+        for (const [k, id] of [["protein", "eqProtein"], ["carbs", "eqCarbs"], ["fat", "eqFat"]])
           if (q(id) >= 0) e[k] = q(id);
+        e.kcal = macroKcal(e.protein, e.carbs, e.fat);
       }
       const g = e.quick ? 0 : parseFloat($("entryGrams").value.replace(",", "."));
       if (g > 0 && e.grams && g !== e.grams) {
