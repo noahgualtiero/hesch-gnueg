@@ -1,5 +1,6 @@
 // Gnueg – Rezept-Worker (Cloudflare Workers)
 // Nimmt einen Rezept-Link oder ein Rezept-Bild entgegen und liefert Nährwerte pro Portion.
+// Mit mode "einkauf" liest er Lebensmittel von einem Einkaufszettel oder Kassenbon.
 // Mit mode "zutaten" erkennt er Zutaten auf einem Foto (Zutaten oder fertiges Gericht) und schätzt Mengen.
 // Variablen in Cloudflare (Settings → Variables and Secrets):
 //   ALLOWED_ORIGIN  (Text)    z. B. https://noahgualtiero.github.io
@@ -91,6 +92,16 @@ Nährwerte pro 100 g an. Setze name auf eine kurze Bezeichnung des Gerichts, ser
 Gesamtgewicht, per_portion auf die Summe, source auf "geschaetzt". Antworte auf Deutsch. Sind keine Lebensmittel erkennbar,
 gib eine leere Zutatenliste zurück und erkläre es in note.`;
 
+const SYSTEM_EINKAUF = `Du bist Ernährungsberater. Du bekommst ein Foto eines Einkaufszettels (handgeschrieben oder getippt)
+oder eines Kassenbons aus dem Supermarkt. Erkenne jedes Lebensmittel und Getränk darauf. Ignoriere alles andere
+(Putz- und Pflegeartikel, Tragtaschen, Pfand, Rabatte, Totale, Zahlungsangaben). Kürzel auf Kassenbons (z. B. "M-CL", "Bio",
+Markennamen, Gewichte) in einen verständlichen Namen übersetzen. Pro Lebensmittel: text = wie auf dem Zettel,
+food = einfacher deutscher Lebensmittelname für die Suche in einer Nährwertdatenbank (Einzahl, ohne Marke und Menge,
+z. B. "Poulet Brust", "Magerquark", "Haferflocken"), grams = übliche Portion für eine Mahlzeit in Gramm
+(z. B. Joghurt 180, Banane 120, Reis roh 80, Poulet 150, Getränk 300), dazu übliche Nährwerte pro 100 g.
+Fasse doppelte Einträge zusammen. Setze name auf "Einkauf", servings auf 1, portion_grams auf 0, per_portion auf 0,
+source auf "geschaetzt". Antworte auf Deutsch. Sind keine Lebensmittel erkennbar, gib eine leere Liste zurück und erkläre es in note.`;
+
 async function askOpenAI(key, content, system = SYSTEM) {
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
@@ -133,6 +144,13 @@ export default {
       } else if (body.image) {
         if (!/^data:image\/(png|jpe?g|webp|gif);base64,/.test(body.image) || body.image.length > 8_000_000)
           return json({ error: "Bild ungültig oder zu gross." }, 400, headers);
+        if (body.mode === "einkauf") {
+          const content = [{ type: "text", text: "Hier ist ein Foto eines Einkaufszettels oder Kassenbons." },
+                           { type: "image_url", image_url: { url: body.image } }];
+          const result = await askOpenAI(key, content, SYSTEM_EINKAUF);
+          result.name = "Einkauf";
+          return json(result, 200, headers);
+        }
         if (body.mode === "zutaten") {
           const content = [{ type: "text", text: "Hier ist ein Foto von Zutaten oder einem Gericht." },
                            { type: "image_url", image_url: { url: body.image } }];

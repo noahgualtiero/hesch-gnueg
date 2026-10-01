@@ -1,6 +1,6 @@
 # Rezept-Import einrichten (Cloudflare Worker + OpenAI)
 
-Damit Gnueg Rezepte per Link oder Screenshot auslesen und Zutaten auf Fotos erkennen kann,
+Damit Gnueg Rezepte per Link oder Screenshot auslesen, Zutaten auf Fotos erkennen und Einkaufszettel lesen kann,
 braucht es einen kleinen, kostenlosen Cloudflare Worker. Er lädt Rezeptseiten und leitet
 die Anfragen an OpenAI weiter.
 
@@ -26,6 +26,11 @@ Die App ruft immer `https://gnueg-rezept.noahkaech.workers.dev` auf (in `index.h
 
 Variablen aus der alten Version (`OPENAI_API_KEY`, `APP_TOKEN`) werden nicht mehr gebraucht
 und können gelöscht werden.
+
+## Worker aktualisieren
+
+Wenn sich `rezept-worker.js` ändert (z. B. für den Einkaufszettel), in Cloudflare beim Worker
+**Edit code** öffnen, den ganzen Inhalt durch die neue Datei ersetzen und **Deploy** klicken.
 
 ## 2. Eigenen OpenAI-API-Schlüssel erstellen (jede Person)
 

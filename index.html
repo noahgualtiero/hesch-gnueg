@@ -122,7 +122,7 @@
   .sheet-backdrop.searching #status, .sheet-backdrop.searching #reader { display: none; }
   .sheet-backdrop.searching .sheet::before, .sheet-backdrop.searching .sheet-head,
   .sheet-backdrop.searching #barcodeSection, .sheet-backdrop.searching #newFoodBtn, .sheet-backdrop.searching #quickBtn, .sheet-backdrop.searching #searchLabel,
-  .sheet-backdrop.searching #recipeSection { display: none; }
+  .sheet-backdrop.searching #recipeSection, .sheet-backdrop.searching #shopSection { display: none; }
   .sheet-backdrop.searching #searchCancel { display: block; }
   .combo-list { margin-top: 8px; max-height: 280px; overflow-y: auto; border-radius: 12px; background: var(--card);
                 box-shadow: 0 0 0 .5px var(--line), 0 8px 24px rgba(0, 0, 0, .12); overscroll-behavior: contain; }
@@ -155,6 +155,11 @@
   .choice-opt input { display: none; }
   .manual { margin-top: 10px; }
   .recipe-btn { margin-top: 0; }
+  #shopSection { margin-top: 4px; }
+  .shop-btn { padding: 12px 8px; font-size: 14px; background: var(--soft); color: var(--text); }
+  .shop-row { display: flex; align-items: center; gap: 8px; }
+  .shop-row .status:empty { display: none; }
+  #shopClear { margin-top: 4px; font-size: 14px; }
   .choice-small { margin-top: 10px; }
   .choice-small .choice-opt { padding: 12px 8px; font-size: 14px; background: var(--soft); color: var(--text); }
   #newFoodBtn { display: none !important; } /* ersetzt durch „Manuell erstellen“ */
@@ -718,6 +723,15 @@
             <small>Makros oder Rezept</small></button>
         </div>
       </div>
+      <div id="shopSection">
+        <label>Einkauf</label>
+        <label class="choice-opt shop-btn">Einkaufszettel fotografieren
+          <small>Liste oder Kassenbon · eine Woche lang oben in der Suche</small>
+          <input type="file" id="shopPhoto" accept="image/*"></label>
+        <div class="shop-row"><div class="spin" id="shopSpin" hidden aria-hidden="true"><svg viewBox="0 0 32 32"><circle class="ptr-track" cx="16" cy="16" r="11"/><circle class="ptr-arc" cx="16" cy="16" r="11"/></svg></div>
+          <div class="status" id="shopStatus"></div></div>
+        <button class="linkbtn" id="shopClear" hidden>Einkaufsliste leeren</button>
+      </div>
       <button class="linkbtn newfood" id="newFoodBtn" hidden>Eigenes Lebensmittel oder Rezept erstellen</button>
       <div id="status" class="status"></div>
       <div id="reader"></div>
@@ -1110,6 +1124,20 @@ function rememberUsed(p, portion) {
           ...used.filter(u => u.key !== p.key)].slice(0, 30);
   writeList(USED_KEY, used);
 }
+// Einkaufszettel: erkannte Lebensmittel 7 Tage lang oben in der Liste
+const SHOP_KEY = "gnueg-einkauf", SHOP_DAYS = 7;
+let shop = readList(SHOP_KEY);
+const activeShop = () => shop.filter(it => it.until > Date.now());
+function renderShopInfo() {
+  const n = activeShop().length;
+  $("shopClear").hidden = !n;
+  // Hinweis nur zeigen, wenn gerade keine andere Meldung (Ergebnis, Fehler, Ladevorgang) dasteht
+  if (n && $("shopSpin").hidden && !$("shopStatus").textContent) {
+    const last = Math.max(...activeShop().map(it => it.until));
+    const days = Math.max(1, Math.ceil((last - Date.now()) / 864e5));
+    $("shopStatus").textContent = `${n} eingekaufte Lebensmittel stehen noch ${days === 1 ? "1 Tag" : days + " Tage"} oben in der Liste.`;
+  }
+}
 const customProduct = c => ({ key: "custom:" + c.id, name: c.name, img: "", kcal: c.kcal, protein: c.protein, carbs: c.carbs, fat: c.fat });
 
 // Suchbares Auswahlfeld: Favoriten, eigene Lebensmittel, Gerichte, Grundnahrungsmittel
@@ -1138,6 +1166,9 @@ function foodGroups(q = "") {
   const match = it => !q || norm(it.label).includes(q);
   const groups = [];
   const add = (title, items) => { items = items.filter(match).sort(abc); if (items.length) groups.push([title, items]); };
+  // Eingekauftes (per Einkaufszettel-Foto) steht eine Woche lang ganz oben
+  add("🛒 Eingekauft", activeShop().map(it => ({ label: it.name, food: it, portion: it.portion,
+    pick: () => { showProduct(it, it.portion); if (it.est) setStatus("Werte geschätzt, bitte bei Bedarf anpassen."); else if (/^snd:/.test(it.key)) setStatus(SND_NOTE); } })));
   add("★ Favoriten", favs.map(f => ({ label: f.name, food: f, portion: f.portion, pick: () => showProduct(f, f.portion) })));
   add("Eigene Lebensmittel und Rezepte", customs.map(c => ({ label: c.name, food: customProduct(c), portion: c.portion,
     pick: () => showProduct(customProduct(c), c.portion) })));
@@ -1640,6 +1671,63 @@ async function recognizeIngredients(file) {
     $("ingPhotoSpin").hidden = true;
   }
 }
+function shopStatus(msg, error) {
+  $("shopStatus").textContent = msg;
+  $("shopStatus").className = "status" + (error ? " error" : "");
+}
+$("shopPhoto").addEventListener("change", e => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (file) recognizeShopping(file);
+});
+$("shopClear").addEventListener("click", () => {
+  shop = []; writeList(SHOP_KEY, shop);
+  shopStatus("Einkaufsliste geleert.");
+  renderShopInfo(); buildSelect();
+});
+async function recognizeShopping(file) {
+  const cfg = recipeCfg();
+  if (!cfg.key) { shopStatus("Dafür braucht es deinen OpenAI-Schlüssel. Trag ihn unter „Rezept per Link oder Screenshot“ ein.", true); return; }
+  let image;
+  try {
+    const img = await loadImage(file);
+    const scale = Math.min(1, 2000 / Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement("canvas");
+    c.width = Math.round(img.naturalWidth * scale); c.height = Math.round(img.naturalHeight * scale);
+    c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+    URL.revokeObjectURL(img.src);
+    image = c.toDataURL("image/jpeg", 0.85);
+  } catch { shopStatus("Das Bild konnte nicht gelesen werden.", true); return; }
+  shopStatus("Einkaufszettel wird gelesen …");
+  $("shopSpin").hidden = false;
+  try {
+    const res = await fetch(WORKER_URL, { method: "POST", headers: { "Content-Type": "application/json", "X-OpenAI-Key": cfg.key },
+                                       body: JSON.stringify({ image, mode: "einkauf" }) });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(d.error || `Fehler ${res.status}`);
+    if (d.name !== "Einkauf") throw new Error("Der Rezept-Dienst kennt den Einkaufszettel noch nicht. Bitte den Worker-Code in Cloudflare aktualisieren.");
+    const found = (d.ingredients || []).filter(i => i && typeof i === "object" && i.food);
+    if (!found.length) throw new Error(d.note || "Keine Lebensmittel erkannt.");
+    const until = Date.now() + SHOP_DAYS * 864e5;
+    const items = found.map(i => {
+      const hit = searchSND(norm(String(i.food).trim()), 1)[0];
+      const portion = Math.round(i.grams) || 100;
+      return hit ? { ...hit, portion, until }
+        : { key: "einkauf:" + norm(i.food), name: i.food, img: "", kcal: i.kcal_100g, protein: i.protein_100g,
+            carbs: i.carbs_100g, fat: i.fat_100g, portion, est: true, until };
+    });
+    const keys = new Set(items.map(it => it.key));
+    shop = [...items.filter((it, n) => items.findIndex(x => x.key === it.key) === n), ...activeShop().filter(it => !keys.has(it.key))];
+    writeList(SHOP_KEY, shop);
+    shopStatus(`${items.length} Lebensmittel erkannt: ${items.map(it => it.name).join(" · ")}. Sie stehen jetzt eine Woche lang ganz oben in der Liste.`);
+    renderShopInfo(); buildSelect();
+  } catch (err) {
+    shopStatus(err.message === "Failed to fetch" ? "Rezept-Dienst gerade nicht erreichbar. Internetverbindung prüfen." : err.message, true);
+  } finally {
+    $("shopSpin").hidden = true;
+  }
+}
+renderShopInfo();
 const it0 = group => group === "Nährwerttabelle" ? 40 : 8;
 function renderIngList() {
   const raw = $("ingSearch").value.trim(), q = norm(raw);
@@ -1818,6 +1906,7 @@ function showToast(msg) {
 function showStep(step) {
   if (step === "add") { pickedMeal = mealForTime(new Date()); renderMealPick($("mealPick"), pickedMeal); }
   $("captureStep").hidden = step !== "capture";
+  if (step === "capture" && $("shopSpin").hidden) { shopStatus(""); renderShopInfo(); }
   $("addCard").hidden = step !== "add";
   $("createStep").hidden = step !== "create";
   $("recipeStep").hidden = step !== "recipe";
