@@ -267,7 +267,9 @@
   .meal-table .chev-cell { width: 22px; padding-left: 6px; }
   .meal-table .chev-cell .chev { display: inline-block; margin: 0 2px 1px 0; }
   .meal-table tbody tr.sel th, .meal-table tbody tr.sel td { background: var(--soft); }
-  .meal-table tbody tr.sel th { font-weight: 600; }
+  .meal-table tbody tr.sel th { font-weight: 600; padding-left: 8px; border-radius: 8px 0 0 8px; }
+  .meal-table tbody tr.sel td:last-child { border-radius: 0 8px 8px 0; }
+  .meal-table tbody tr.sel .chev { visibility: hidden; }
   .meal-table tbody tr.sel td:last-child { border-radius: 0 8px 8px 0; }
   .list-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 12px; }
   .list-head h2 { margin: 0; }
