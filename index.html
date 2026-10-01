@@ -262,6 +262,16 @@
   .meal-table thead th { font-size: 12px; color: var(--muted); padding-top: 0; }
   .meal-table tbody tr:last-child th, .meal-table tbody tr:last-child td { border-bottom: 0; }
   .meal-table .none { color: var(--faint); }
+  .meal-table tbody tr { cursor: pointer; }
+  .meal-table tbody tr:active { opacity: .6; }
+  .meal-table .chev-cell { width: 22px; padding-left: 6px; }
+  .meal-table .chev-cell .chev { display: inline-block; margin: 0 2px 1px 0; }
+  .meal-table tbody tr.sel th, .meal-table tbody tr.sel td { background: var(--soft); }
+  .meal-table tbody tr.sel th { font-weight: 600; border-radius: 8px 0 0 8px; padding-left: 8px; }
+  .meal-table tbody tr.sel td:last-child { border-radius: 0 8px 8px 0; }
+  .filter-chip { display: flex; justify-content: space-between; align-items: center; gap: 10px; background: var(--soft);
+                 border-radius: 10px; padding: 8px 12px; margin: -2px 0 12px; font-size: 14px; font-weight: 600; }
+  .filter-chip .linkbtn { margin: 0; font-size: 14px; }
   .meal-table .dens::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%;
                               background: var(--faint); margin-right: 5px; vertical-align: 1px; }
   .meal-table .dens.good::before { background: var(--good); }
@@ -527,13 +537,13 @@
   </section>
 
   <section class="card" id="mealCard" hidden>
-    <h2>Mahlzeiten</h2>
+    <h2>Mahlzeiten und Sport</h2>
     <div id="mealTable"></div>
   </section>
 
   <section class="card">
     <h2 id="mealsTitle">Einträge</h2>
-    <div class="segmented meal-filter" id="mealFilter" role="group" aria-label="Mahlzeit anzeigen"></div>
+    <div class="filter-chip" id="filterChip" hidden><span id="filterLabel"></span><button class="linkbtn" id="filterReset">Alle anzeigen</button></div>
     <div id="meals"></div>
     <p class="dens-legend" id="densLegend"><span>P = g Protein pro 100 kcal</span> · <span><i class="good"></i>ab 10 sehr gut</span> · <span><i class="bad"></i>unter 4 wenig</span></p>
   </section>
@@ -1958,12 +1968,18 @@ const densClass = v => v >= 10 ? "good" : v < 4 ? "bad" : "";
 const fmtDensity = v => v.toLocaleString("de-CH", { maximumFractionDigits: 1 });
 // Filter der erfassten Lebensmittel: alle oder eine Mahlzeit
 let mealFilter = "all";
-$("mealFilter").addEventListener("click", e => {
-  const b = e.target.closest("button[data-f]");
-  if (!b) return;
-  mealFilter = b.dataset.f;
+// Zeile in der Mahlzeiten-Tabelle antippen: Einträge darauf filtern; nochmals antippen oder „Alle anzeigen“ setzt zurück
+function pickMealRow(k) {
+  mealFilter = mealFilter === k ? "all" : k;
   render();
+  if (mealFilter !== "all") $("mealsTitle").closest("section").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+$("mealTable").addEventListener("click", e => { const row = e.target.closest("tr[data-f]"); if (row) pickMealRow(row.dataset.f); });
+$("mealTable").addEventListener("keydown", e => {
+  const row = e.target.closest("tr[data-f]");
+  if (row && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); pickMealRow(row.dataset.f); }
 });
+$("filterReset").addEventListener("click", () => { mealFilter = "all"; render(); });
 
 function render() {
   const total = sum(entries);
@@ -2047,9 +2063,11 @@ function render() {
   const foods = list.filter(food);
   $("densLegend").hidden = !foods.length;
   // Filter: Alle, alle Mahlzeiten und Sport
-  const FILTERS = [["all", "Alle"], ...MEALS.map(([k]) => [k, MEAL_SHORT[k]]), ["sport", "Sport"]];
-  $("mealFilter").hidden = !list.length;
-  $("mealFilter").innerHTML = FILTERS.map(([k, l]) => `<button data-f="${k}" aria-pressed="${k === mealFilter}">${l}</button>`).join("");
+  const filterName = { ...Object.fromEntries(MEALS), sport: "Sport" }[mealFilter];
+  $("filterChip").hidden = mealFilter === "all";
+  $("filterLabel").textContent = filterName ? `Nur ${filterName}` : "";
+  const rowAttr = k => `data-f="${k}" tabindex="0" role="button" class="${k === mealFilter ? "sel" : ""}" aria-pressed="${k === mealFilter}"`;
+  const chev = '<td class="chev-cell"><span class="chev" aria-hidden="true"></span></td>';
   // Eigene Tabelle: pro Mahlzeit kcal, Protein, Protein-Dichte; Sport mit Verbrauch
   const dash = '<span class="none">–</span>';
   let rows = "";
@@ -2057,14 +2075,14 @@ function render() {
     const items = foods.filter(e => mealOf(e) === k);
     const s = sum(items), d = density(s);
     rows += items.length
-      ? `<tr><th>${label}</th><td>${r(s.kcal)}</td><td>${r(s.protein)} g</td><td><span class="dens ${densClass(d)}">${fmtDensity(d)}</span></td></tr>`
-      : `<tr><th>${label}</th><td>${dash}</td><td>${dash}</td><td>${dash}</td></tr>`;
+      ? `<tr ${rowAttr(k)}><th>${label}</th><td>${r(s.kcal)}</td><td>${r(s.protein)} g</td><td><span class="dens ${densClass(d)}">${fmtDensity(d)}</span></td>${chev}</tr>`
+      : `<tr ${rowAttr(k)}><th>${label}</th><td>${dash}</td><td>${dash}</td><td>${dash}</td>${chev}</tr>`;
   }
   const sp = list.filter(e => !food(e)).reduce((a, e) => a + e.kcal, 0);
-  rows += `<tr><th>Sport</th><td>${sp ? "+" + r(sp) : dash}</td><td>${dash}</td><td>${dash}</td></tr>`;
+  rows += `<tr ${rowAttr("sport")}><th>Sport</th><td>${sp ? "+" + r(sp) : dash}</td><td>${dash}</td><td>${dash}</td>${chev}</tr>`;
   $("mealCard").hidden = !list.length;
   $("mealTable").innerHTML = `<table class="meal-table">
-      <thead><tr><th></th><th>kcal</th><th>Protein</th><th>P/100 kcal</th></tr></thead><tbody>${rows}</tbody></table>`;
+      <thead><tr><th></th><th>kcal</th><th>Protein</th><th>P/100 kcal</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
   const entryHtml = e => `<div class="entry" role="button" tabindex="0" data-id="${e.id}">${e.kind === "sport"
           ? `<div class="e-main"><div class="e-name">${esc(e.name)}</div>
                <div class="e-meta"><span class="tag">Sport</span>${r(e.minutes)} min · ${fmtTime(e.time)}</div></div>
