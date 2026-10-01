@@ -2026,6 +2026,12 @@ function render() {
     if (protLeft > 0 && kcalLeft <= 0) tip = `Für das Protein am besten sehr magere Quellen wie Magerquark oder Pouletbrust.`;
     else if (protLeft > 0 && freeKcal <= 0) tip = `Die restlichen kcal reichen knapp fürs Protein. Möglichst reine Proteinquellen wählen.`;
     else if (kcalLeft > 0 && protLeft > 0) tip = `Nach dem Protein bleiben <strong>${r(freeKcal)} kcal</strong> frei, z. B. ${r(freeKcal / 4)} g Kohlenhydrate oder ${r(freeKcal / 9)} g Fett.`;
+    // Protein-Dichte des ganzen Tages (g Protein pro 100 kcal)
+    if (total.kcal > 0) {
+      const dd = density(total);
+      tip += (tip ? " " : "") + `Heute bisher <strong>${fmtDensity(dd)} g Protein pro 100 kcal</strong>`
+        + (dd >= 10 ? " – sehr gut." : dd < 4 ? " – eher wenig." : ".");
+    }
     $("goalView").innerHTML = `
       <div class="stats">
         <div class="stat">${kBig}
