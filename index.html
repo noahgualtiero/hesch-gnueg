@@ -396,12 +396,19 @@
   .cell.today.t-bad { box-shadow: inset 0 0 0 2px var(--danger); }
   button.cell { width: 16px; height: 16px; }
   button.cell:active { opacity: 1; }
-  .grid-legend { display: flex; flex-wrap: nowrap; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--muted); margin-top: 12px; white-space: nowrap; }
+  .grid-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--muted); margin-top: 8px; white-space: nowrap; }
+  .grid-legend[hidden] { display: none; }
+  .legend-toggle { display: block; margin: 10px 0 0 auto; font-size: 12px; color: var(--muted); }
+  .legend-toggle::after { content: ""; display: inline-block; width: 5px; height: 5px; margin-left: 5px; vertical-align: 2px;
+    border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg); transition: transform .2s; }
+  .legend-toggle[aria-expanded="true"]::after { transform: rotate(-135deg); vertical-align: -1px; }
   .grid-legend span { display: inline-flex; align-items: center; gap: 4px; }
   .grid-legend .cell { cursor: default; width: 10px; height: 10px; border-radius: 3px; }
   #macroTrend { margin-top: 2px; font-size: 12px; }
   #macroTrend:empty { display: none; }
   .grid-legend + #streak { margin-top: 6px; font-size: 12px; }
+  .grid-legend .cell.today.t-good { box-shadow: inset 0 0 0 1.5px #34C759; }
+  .grid-legend .cell.today.t-bad { box-shadow: inset 0 0 0 1.5px var(--danger); }
   .grid-legend .cell.p-ok::after { inset: 2px; }
   #streak { font-size: 14px; }
   .card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; cursor: pointer; margin-bottom: 12px; }
@@ -547,12 +554,15 @@
     </div>
     <div id="weekStrip" class="week"></div>
     <div class="grid-wrap" id="gridFull" hidden><div id="heatmap"></div></div>
-    <div class="grid-legend">
+    <button type="button" class="linkbtn legend-toggle" id="legendToggle" aria-expanded="false" aria-controls="gridLegend">Legende</button>
+    <div class="grid-legend" id="gridLegend" hidden>
       <span><i class="cell k-ok"></i>im Ziel</span>
       <span><i class="cell k-under"></i>zu wenig</span>
       <span><i class="cell k-over"></i>zu viel</span>
       <span><i class="cell k-under p-ok"></i>Protein ✓</span>
       <span id="sportLegend" hidden><i class="sport-key"></i>Sport</span>
+      <span><i class="cell today t-good"></i>heute: Protein vor Kalorien</span>
+      <span><i class="cell today t-bad"></i>heute: Kalorien vor Protein</span>
     </div>
     <div id="streak" class="status"></div>
     <div id="macroTrend" class="status"></div>
@@ -2386,6 +2396,15 @@ function toggleGrid() {
   applyGridOpen();
 }
 $("gridToggle").addEventListener("click", toggleGrid);
+// Legende standardmässig eingeklappt, Zustand wird gemerkt
+const LEGEND_OPEN_KEY = "gnueg-legende-offen";
+function setLegendOpen(open) {
+  $("gridLegend").hidden = !open;
+  $("legendToggle").setAttribute("aria-expanded", open);
+  try { localStorage.setItem(LEGEND_OPEN_KEY, open ? "1" : "0"); } catch {}
+}
+try { setLegendOpen(localStorage.getItem(LEGEND_OPEN_KEY) === "1"); } catch { setLegendOpen(false); }
+$("legendToggle").addEventListener("click", () => setLegendOpen($("gridLegend").hidden));
 $("gridToggle").addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleGrid(); } });
 function renderWeekStrip() {
   const today = new Date(); today.setHours(12, 0, 0, 0);
