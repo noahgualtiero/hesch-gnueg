@@ -705,9 +705,7 @@
     </div>
   <div id="recipeStep" hidden>
       <div id="recipeConfig" class="recipe-config">
-        <p class="recipe-hint">Einmalig einrichten: Adresse des Rezept-Workers und dein eigener OpenAI-API-Schlüssel (platform.openai.com → API keys). Der Schlüssel bleibt nur auf diesem Gerät gespeichert.</p>
-        <label for="rWorker">Worker-Adresse</label>
-        <input type="text" id="rWorker" inputmode="url" autocomplete="off" placeholder="https://gnueg-rezept.….workers.dev">
+        <p class="recipe-hint">Einmalig einrichten: dein eigener OpenAI-API-Schlüssel (platform.openai.com → API keys). Er bleibt nur auf diesem Gerät gespeichert.</p>
         <label for="rToken">OpenAI-API-Schlüssel</label>
         <input type="password" id="rToken" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="sk-…">
         <button id="rCfgSave">Speichern</button>
@@ -1269,8 +1267,8 @@ async function fetchOnline(q) {
 
 // Rezept-Import per Link oder Screenshot (über den eigenen Cloudflare Worker mit OpenAI)
 const RECIPE_CFG_KEY = "naehrwert-rezept-worker";
-// Adresse des gemeinsamen Rezept-Workers; leer lassen, dann trägt man sie beim Einrichten ein
-const DEFAULT_WORKER = "";
+// Alle Anfragen laufen immer über diesen Worker; jede Person trägt nur ihren eigenen OpenAI-Schlüssel ein
+const WORKER_URL = "https://gnueg-rezept.noahkaech.workers.dev";
 const recipeCfg = () => { try { return JSON.parse(localStorage.getItem(RECIPE_CFG_KEY)) || {}; } catch { return {}; } };
 let recipeData = null;
 
@@ -1278,9 +1276,9 @@ function openRecipe() {
   const cfg = recipeCfg();
   $("rUrl").value = ""; $("recipeStatus").textContent = ""; $("recipeStatus").className = "status";
   $("recipeResult").hidden = true; recipeData = null;
-  $("rWorker").value = cfg.url || DEFAULT_WORKER; $("rToken").value = cfg.key || "";
-  $("recipeConfig").hidden = !!(cfg.url && cfg.key);
-  $("recipeInput").hidden = !(cfg.url && cfg.key);
+  $("rToken").value = cfg.key || "";
+  $("recipeConfig").hidden = !!cfg.key;
+  $("recipeInput").hidden = !cfg.key;
   showStep("recipe");
 }
 function recipeStatus(msg, error) {
@@ -1290,9 +1288,9 @@ function recipeStatus(msg, error) {
 $("recipeBtn").addEventListener("click", openRecipe);
 $("recipeCfgLink").addEventListener("click", () => { $("recipeConfig").hidden = !$("recipeConfig").hidden; });
 $("rCfgSave").addEventListener("click", () => {
-  const url = $("rWorker").value.trim().replace(/\/+$/, ""), token = $("rToken").value.trim();
-  if (!/^https:\/\//.test(url) || !/^sk-/.test(token)) { recipeStatus("Bitte Worker-Adresse (https://…) und OpenAI-Schlüssel (sk-…) eingeben.", true); return; }
-  try { localStorage.setItem(RECIPE_CFG_KEY, JSON.stringify({ url, key: token })); } catch {}
+  const token = $("rToken").value.trim();
+  if (!/^sk-/.test(token)) { recipeStatus("Bitte deinen OpenAI-Schlüssel (sk-…) eingeben.", true); return; }
+  try { localStorage.setItem(RECIPE_CFG_KEY, JSON.stringify({ key: token })); } catch {}
   $("recipeConfig").hidden = true; $("recipeInput").hidden = false;
   recipeStatus("Gespeichert. Jetzt Link einfügen oder Screenshot wählen.");
 });
@@ -1304,14 +1302,14 @@ async function recipeRequest(payload) {
   $("rUrlGo").disabled = true;
   $("recipeSpin").hidden = false;
   try {
-    const res = await fetch(cfg.url, { method: "POST", headers: { "Content-Type": "application/json", "X-OpenAI-Key": cfg.key },
+    const res = await fetch(WORKER_URL, { method: "POST", headers: { "Content-Type": "application/json", "X-OpenAI-Key": cfg.key },
                                        body: JSON.stringify(payload) });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || `Fehler ${res.status}`);
     if (!data.name || !data.per_portion || !data.per_portion.kcal) throw new Error(data.note || "Kein Rezept erkannt.");
     showRecipe(data);
   } catch (e) {
-    recipeStatus(e.message === "Failed to fetch" ? "Worker nicht erreichbar. Adresse prüfen." : e.message, true);
+    recipeStatus(e.message === "Failed to fetch" ? "Rezept-Dienst gerade nicht erreichbar. Internetverbindung prüfen." : e.message, true);
   } finally {
     $("rUrlGo").disabled = false;
     $("recipeSpin").hidden = true;
@@ -1514,8 +1512,8 @@ $("portionPhoto").addEventListener("change", e => {
 $("manualCreateBtn").addEventListener("click", () => $("newFoodBtn").click());
 async function recognizeIngredients(file) {
   const cfg = recipeCfg();
-  if (!cfg.url || !cfg.key) {
-    ingPhotoStatus("Dafür braucht es den Rezept-Worker. Richte ihn unter „Rezept auslesen“ ein.", true);
+  if (!cfg.key) {
+    ingPhotoStatus("Dafür braucht es deinen OpenAI-Schlüssel. Trag ihn unter „Rezept per Link oder Screenshot“ ein.", true);
     return;
   }
   let image;
@@ -1531,7 +1529,7 @@ async function recognizeIngredients(file) {
   ingPhotoStatus("Zutaten werden erkannt …");
   $("ingPhotoSpin").hidden = false;
   try {
-    const res = await fetch(cfg.url, { method: "POST", headers: { "Content-Type": "application/json", "X-OpenAI-Key": cfg.key },
+    const res = await fetch(WORKER_URL, { method: "POST", headers: { "Content-Type": "application/json", "X-OpenAI-Key": cfg.key },
                                        body: JSON.stringify({ image, mode: "zutaten" }) });
     const d = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(d.error || `Fehler ${res.status}`);
@@ -1548,7 +1546,7 @@ async function recognizeIngredients(file) {
     renderIngredients();
     ingPhotoStatus(`${found.length} ${found.length === 1 ? "Zutat" : "Zutaten"} erkannt. Die Mengen sind geschätzt, bitte anpassen.`);
   } catch (err) {
-    ingPhotoStatus(err.message === "Failed to fetch" ? "Worker nicht erreichbar. Adresse prüfen." : err.message, true);
+    ingPhotoStatus(err.message === "Failed to fetch" ? "Rezept-Dienst gerade nicht erreichbar. Internetverbindung prüfen." : err.message, true);
   } finally {
     $("ingPhotoSpin").hidden = true;
   }

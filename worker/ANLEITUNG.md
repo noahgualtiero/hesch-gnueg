@@ -22,8 +22,7 @@ eingerichtet werden.
 |---|---|---|
 | `ALLOWED_ORIGIN` | Text | `https://noahgualtiero.github.io` |
 
-Die Worker-Adresse steht oben im Worker, z. B. `https://gnueg-rezept.DEINNAME.workers.dev`.
-Trägt man sie in `index.html` bei `DEFAULT_WORKER` ein, ist sie in der App schon vorausgefüllt.
+Die App ruft immer `https://gnueg-rezept.noahkaech.workers.dev` auf (in `index.html` bei `WORKER_URL`).
 
 Variablen aus der alten Version (`OPENAI_API_KEY`, `APP_TOKEN`) werden nicht mehr gebraucht
 und können gelöscht werden.
@@ -38,7 +37,7 @@ und können gelöscht werden.
 ## 3. In der App eintragen
 
 1. In Gnueg **+ Nahrungsmittel** → **Rezept per Link oder Screenshot** antippen.
-2. Worker-Adresse und den eigenen OpenAI-Schlüssel eintragen und speichern.
+2. Den eigenen OpenAI-Schlüssel eintragen und speichern.
    Das ist nur einmal nötig, die Angaben bleiben auf dem Gerät gespeichert.
 
 ## Sicherheit
