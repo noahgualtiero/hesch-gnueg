@@ -2,9 +2,9 @@
 // Nimmt einen Rezept-Link oder ein Rezept-Bild entgegen und liefert Nährwerte pro Portion.
 // Mit mode "zutaten" erkennt er Zutaten auf einem Foto (Zutaten oder fertiges Gericht) und schätzt Mengen.
 // Variablen in Cloudflare (Settings → Variables and Secrets):
-//   OPENAI_API_KEY  (Secret)  dein OpenAI-API-Schlüssel
-//   APP_TOKEN       (Secret)  frei gewählter Zugangscode, den du in der App einträgst
 //   ALLOWED_ORIGIN  (Text)    z. B. https://noahgualtiero.github.io
+// Den OpenAI-API-Schlüssel trägt jede Person selbst in der App ein; er wird pro Anfrage
+// im Header X-OpenAI-Key mitgeschickt und vom Worker nirgends gespeichert.
 
 const MODEL = "gpt-4o-mini";
 
@@ -60,7 +60,7 @@ function cors(env) {
   return {
     "Access-Control-Allow-Origin": allowed,
     "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, X-App-Token",
+    "Access-Control-Allow-Headers": "Content-Type, X-OpenAI-Key",
     "Access-Control-Max-Age": "86400",
     "Vary": "Origin"
   };
@@ -91,10 +91,10 @@ Nährwerte pro 100 g an. Setze name auf eine kurze Bezeichnung des Gerichts, ser
 Gesamtgewicht, per_portion auf die Summe, source auf "geschaetzt". Antworte auf Deutsch. Sind keine Lebensmittel erkennbar,
 gib eine leere Zutatenliste zurück und erkläre es in note.`;
 
-async function askOpenAI(env, content, system = SYSTEM) {
+async function askOpenAI(key, content, system = SYSTEM) {
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
-    headers: { "Authorization": `Bearer ${env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
+    headers: { "Authorization": `Bearer ${key}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       model: MODEL,
       temperature: 0.2,
@@ -103,6 +103,8 @@ async function askOpenAI(env, content, system = SYSTEM) {
     })
   });
   const data = await res.json();
+  if (res.status === 401) throw new Error("OpenAI-Schlüssel ungültig. Bitte in der App prüfen.");
+  if (res.status === 429) throw new Error("OpenAI-Limit erreicht oder kein Guthaben. Bitte auf platform.openai.com prüfen.");
   if (!res.ok) throw new Error(data?.error?.message || `OpenAI-Fehler ${res.status}`);
   return JSON.parse(data.choices[0].message.content);
 }
@@ -114,12 +116,11 @@ export default {
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers });
     if (request.method !== "POST") return json({ error: "Nur POST erlaubt." }, 405, headers);
 
-    // Zugriffsschutz: erlaubte Herkunft und Zugangscode
+    // Nur Anfragen aus der App; jede Person nutzt ihren eigenen OpenAI-Schlüssel
     if (env.ALLOWED_ORIGIN && env.ALLOWED_ORIGIN !== "*" && origin !== env.ALLOWED_ORIGIN)
       return json({ error: "Herkunft nicht erlaubt." }, 403, headers);
-    if (!env.APP_TOKEN || request.headers.get("X-App-Token") !== env.APP_TOKEN)
-      return json({ error: "Zugangscode falsch." }, 401, headers);
-    if (!env.OPENAI_API_KEY) return json({ error: "OPENAI_API_KEY fehlt im Worker." }, 500, headers);
+    const key = (request.headers.get("X-OpenAI-Key") || "").trim();
+    if (!/^sk-[\w-]{20,}$/.test(key)) return json({ error: "Bitte einen gültigen OpenAI-API-Schlüssel eintragen (beginnt mit sk-)." }, 401, headers);
 
     let body;
     try { body = await request.json(); } catch { return json({ error: "Ungültige Anfrage." }, 400, headers); }
@@ -135,7 +136,7 @@ export default {
         if (body.mode === "zutaten") {
           const content = [{ type: "text", text: "Hier ist ein Foto von Zutaten oder einem Gericht." },
                            { type: "image_url", image_url: { url: body.image } }];
-          return json(await askOpenAI(env, content, SYSTEM_ZUTATEN), 200, headers);
+          return json(await askOpenAI(key, content, SYSTEM_ZUTATEN), 200, headers);
         }
         content = [{ type: "text", text: "Hier ist ein Screenshot oder Foto eines Rezepts." },
                    { type: "image_url", image_url: { url: body.image } }];
@@ -144,7 +145,7 @@ export default {
       } else {
         return json({ error: "Link, Bild oder Text fehlt." }, 400, headers);
       }
-      const result = await askOpenAI(env, content);
+      const result = await askOpenAI(key, content);
       return json(result, 200, headers);
     } catch (e) {
       return json({ error: e.message || "Unbekannter Fehler." }, 502, headers);

@@ -280,8 +280,9 @@
   .sort-pick::after { content: ""; width: 5px; height: 5px; margin-left: 5px; border-right: 1.5px solid var(--faint);
                       border-bottom: 1.5px solid var(--faint); transform: rotate(45deg) translateY(-2px); }
   .sort-pick select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; padding: 0; cursor: pointer; font-size: 16px; }
+  /* gleich breit wie die gewählte Tabellenzeile: ragt 10px über den Inhalt hinaus, Text 6px eingerückt */
   .filter-chip { display: flex; justify-content: space-between; align-items: center; gap: 10px; background: var(--soft);
-                 border-radius: 10px; padding: 8px 12px; margin: -2px 0 12px; font-size: 14px; font-weight: 600; }
+                 border-radius: 8px; padding: 8px 10px 8px 16px; margin: -2px -10px 12px; font-size: 14px; font-weight: 600; }
   .filter-chip .linkbtn { margin: 0; font-size: 14px; }
   .meal-table .dens::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%;
                               background: var(--faint); margin-right: 5px; vertical-align: 1px; }
@@ -704,11 +705,11 @@
     </div>
   <div id="recipeStep" hidden>
       <div id="recipeConfig" class="recipe-config">
-        <p class="recipe-hint">Einmalig einrichten: Adresse deines Cloudflare Workers und der Zugangscode, den du dort als APP_TOKEN gesetzt hast.</p>
+        <p class="recipe-hint">Einmalig einrichten: Adresse des Rezept-Workers und dein eigener OpenAI-API-Schlüssel (platform.openai.com → API keys). Der Schlüssel bleibt nur auf diesem Gerät gespeichert.</p>
         <label for="rWorker">Worker-Adresse</label>
         <input type="text" id="rWorker" inputmode="url" autocomplete="off" placeholder="https://gnueg-rezept.….workers.dev">
-        <label for="rToken">Zugangscode</label>
-        <input type="text" id="rToken" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+        <label for="rToken">OpenAI-API-Schlüssel</label>
+        <input type="password" id="rToken" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="sk-…">
         <button id="rCfgSave">Speichern</button>
       </div>
       <div id="recipeInput" hidden>
@@ -1268,6 +1269,8 @@ async function fetchOnline(q) {
 
 // Rezept-Import per Link oder Screenshot (über den eigenen Cloudflare Worker mit OpenAI)
 const RECIPE_CFG_KEY = "naehrwert-rezept-worker";
+// Adresse des gemeinsamen Rezept-Workers; leer lassen, dann trägt man sie beim Einrichten ein
+const DEFAULT_WORKER = "";
 const recipeCfg = () => { try { return JSON.parse(localStorage.getItem(RECIPE_CFG_KEY)) || {}; } catch { return {}; } };
 let recipeData = null;
 
@@ -1275,9 +1278,9 @@ function openRecipe() {
   const cfg = recipeCfg();
   $("rUrl").value = ""; $("recipeStatus").textContent = ""; $("recipeStatus").className = "status";
   $("recipeResult").hidden = true; recipeData = null;
-  $("rWorker").value = cfg.url || ""; $("rToken").value = cfg.token || "";
-  $("recipeConfig").hidden = !!(cfg.url && cfg.token);
-  $("recipeInput").hidden = !(cfg.url && cfg.token);
+  $("rWorker").value = cfg.url || DEFAULT_WORKER; $("rToken").value = cfg.key || "";
+  $("recipeConfig").hidden = !!(cfg.url && cfg.key);
+  $("recipeInput").hidden = !(cfg.url && cfg.key);
   showStep("recipe");
 }
 function recipeStatus(msg, error) {
@@ -1288,8 +1291,8 @@ $("recipeBtn").addEventListener("click", openRecipe);
 $("recipeCfgLink").addEventListener("click", () => { $("recipeConfig").hidden = !$("recipeConfig").hidden; });
 $("rCfgSave").addEventListener("click", () => {
   const url = $("rWorker").value.trim().replace(/\/+$/, ""), token = $("rToken").value.trim();
-  if (!/^https:\/\//.test(url) || !token) { recipeStatus("Bitte Worker-Adresse (https://…) und Zugangscode eingeben.", true); return; }
-  try { localStorage.setItem(RECIPE_CFG_KEY, JSON.stringify({ url, token })); } catch {}
+  if (!/^https:\/\//.test(url) || !/^sk-/.test(token)) { recipeStatus("Bitte Worker-Adresse (https://…) und OpenAI-Schlüssel (sk-…) eingeben.", true); return; }
+  try { localStorage.setItem(RECIPE_CFG_KEY, JSON.stringify({ url, key: token })); } catch {}
   $("recipeConfig").hidden = true; $("recipeInput").hidden = false;
   recipeStatus("Gespeichert. Jetzt Link einfügen oder Screenshot wählen.");
 });
@@ -1301,7 +1304,7 @@ async function recipeRequest(payload) {
   $("rUrlGo").disabled = true;
   $("recipeSpin").hidden = false;
   try {
-    const res = await fetch(cfg.url, { method: "POST", headers: { "Content-Type": "application/json", "X-App-Token": cfg.token },
+    const res = await fetch(cfg.url, { method: "POST", headers: { "Content-Type": "application/json", "X-OpenAI-Key": cfg.key },
                                        body: JSON.stringify(payload) });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || `Fehler ${res.status}`);
@@ -1511,7 +1514,7 @@ $("portionPhoto").addEventListener("change", e => {
 $("manualCreateBtn").addEventListener("click", () => $("newFoodBtn").click());
 async function recognizeIngredients(file) {
   const cfg = recipeCfg();
-  if (!cfg.url || !cfg.token) {
+  if (!cfg.url || !cfg.key) {
     ingPhotoStatus("Dafür braucht es den Rezept-Worker. Richte ihn unter „Rezept auslesen“ ein.", true);
     return;
   }
@@ -1528,7 +1531,7 @@ async function recognizeIngredients(file) {
   ingPhotoStatus("Zutaten werden erkannt …");
   $("ingPhotoSpin").hidden = false;
   try {
-    const res = await fetch(cfg.url, { method: "POST", headers: { "Content-Type": "application/json", "X-App-Token": cfg.token },
+    const res = await fetch(cfg.url, { method: "POST", headers: { "Content-Type": "application/json", "X-OpenAI-Key": cfg.key },
                                        body: JSON.stringify({ image, mode: "zutaten" }) });
     const d = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(d.error || `Fehler ${res.status}`);
