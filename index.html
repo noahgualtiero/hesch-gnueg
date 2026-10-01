@@ -121,7 +121,7 @@
   .sheet-backdrop.searching .combo-list::after { content: ""; display: block; height: var(--kb, 45vh); }
   .sheet-backdrop.searching #status, .sheet-backdrop.searching #reader { display: none; }
   .sheet-backdrop.searching .sheet::before, .sheet-backdrop.searching .sheet-head,
-  .sheet-backdrop.searching #barcodeSection, .sheet-backdrop.searching #newFoodBtn, .sheet-backdrop.searching #searchLabel,
+  .sheet-backdrop.searching #barcodeSection, .sheet-backdrop.searching #newFoodBtn, .sheet-backdrop.searching #quickBtn, .sheet-backdrop.searching #searchLabel,
   .sheet-backdrop.searching #recipeSection { display: none; }
   .sheet-backdrop.searching #searchCancel { display: block; }
   .combo-list { margin-top: 8px; max-height: 280px; overflow-y: auto; border-radius: 12px; background: var(--card);
@@ -174,6 +174,7 @@
   .favbtn { width: 40px; height: 40px; margin: 0; padding: 0; border-radius: 50%; background: var(--soft); color: var(--muted);
             font-size: 20px; line-height: 1; flex-shrink: 0; }
   .favbtn[aria-pressed="true"] { color: var(--accent); background: var(--accent-soft); }
+  .quick-link { display: block; margin: 18px auto 0; }
   .linkbtn.newfood { display: block; margin: 22px auto 0; font-size: 14px; color: var(--muted); text-align: center; }
   .create-mode { margin: 0 0 4px; }
   .ing-rows:empty { display: none; }
@@ -699,6 +700,7 @@
         </div>
       </div>
       <button class="linkbtn newfood" id="newFoodBtn" hidden>Eigenes Lebensmittel oder Rezept erstellen</button>
+      <button class="linkbtn newfood quick-link" id="quickBtn">Makros direkt eingeben</button>
       <div id="status" class="status"></div>
       <div id="reader"></div>
     </div>
@@ -764,6 +766,22 @@
         <details id="rIngWrap" class="recipe-ing"><summary>Zutaten</summary><ul id="rIngredients"></ul></details>
         <button id="rSave">Speichern und weiter</button>
       </div>
+    </div>
+  <div id="quickStep" hidden>
+      <label for="qName">Bezeichnung (optional)</label>
+      <input type="text" id="qName" maxlength="60" placeholder="z. B. Mittagessen Kantine">
+      <div class="row">
+        <div><label for="qKcal">Kalorien (kcal)</label><input type="text" inputmode="decimal" id="qKcal" placeholder="leer = berechnet"></div>
+        <div><label for="qProtein">Protein (g)</label><input type="text" inputmode="decimal" id="qProtein"></div>
+      </div>
+      <div class="row">
+        <div><label for="qCarbs">Kohlenhydrate (g)</label><input type="text" inputmode="decimal" id="qCarbs"></div>
+        <div><label for="qFat">Fett (g)</label><input type="text" inputmode="decimal" id="qFat"></div>
+      </div>
+      <label>Mahlzeit</label>
+      <div class="segmented meal-pick" id="qMeal" role="group" aria-label="Mahlzeit"></div>
+      <div id="qStatus" class="status"></div>
+      <button id="qAdd">Hinzufügen</button>
     </div>
   <div id="createStep" hidden>
       <button class="linkbtn" id="createBack" hidden>‹ Zurück</button>
@@ -1747,9 +1765,10 @@ function showStep(step) {
   $("addCard").hidden = step !== "add";
   $("createStep").hidden = step !== "create";
   $("recipeStep").hidden = step !== "recipe";
+  $("quickStep").hidden = step !== "quick";
   $("headBack").hidden = step === "capture";
   const dayName = new Date(day + "T12:00:00").toLocaleDateString("de-CH", { day: "numeric", month: "short" });
-  $("sheetTitle").textContent = step === "create" ? (recipeFrom ? "Rezept prüfen" : createMode === "recipe" ? "Neues Rezept" : "Neues Lebensmittel") : step === "recipe" ? "Rezept"
+  $("sheetTitle").textContent = step === "quick" ? "Makros eingeben" : step === "create" ? (recipeFrom ? "Rezept prüfen" : createMode === "recipe" ? "Neues Rezept" : "Neues Lebensmittel") : step === "recipe" ? "Rezept"
     : day !== todayStr() ? "Nachtragen " + dayName : "Hinzufügen";
 }
 function openSheet() {
@@ -1783,7 +1802,32 @@ $("headBack").addEventListener("click", () => {
     }
     return showStep("capture");
   }
+  if (!$("quickStep").hidden) return showStep("capture");
   ($("createStep").hidden ? $("backBtn") : $("createBack")).click();
+});
+// Makros direkt eingeben: Eintrag ohne Lebensmittel und ohne Gewicht
+let quickMeal = "snack";
+$("quickBtn").addEventListener("click", () => {
+  for (const id of ["qName", "qKcal", "qProtein", "qCarbs", "qFat"]) $(id).value = "";
+  $("qStatus").textContent = "";
+  quickMeal = mealForTime(new Date()); renderMealPick($("qMeal"), quickMeal);
+  showStep("quick");
+  $("qKcal").focus();
+});
+$("qMeal").addEventListener("click", e => {
+  const b = e.target.closest("button[data-meal]");
+  if (b) { quickMeal = b.dataset.meal; renderMealPick($("qMeal"), quickMeal); }
+});
+$("qAdd").addEventListener("click", () => {
+  const v = id => Math.max(0, parseFloat(String($(id).value).replace(",", ".")) || 0);
+  let kcal = v("qKcal");
+  const protein = v("qProtein"), carbs = v("qCarbs"), fat = v("qFat");
+  if (!kcal) kcal = protein * 4 + carbs * 4 + fat * 9; // ohne kcal-Angabe aus den Makros berechnen
+  if (!kcal) { $("qStatus").textContent = "Bitte mindestens Kalorien oder Makros eingeben."; $("qStatus").className = "status error"; return; }
+  const name = $("qName").value.trim() || "Direkt eingegeben";
+  entries.push({ id: Date.now(), time: new Date().toISOString(), meal: quickMeal, quick: true, name, grams: 0, kcal, protein, carbs, fat });
+  save(); render(); closeSheet();
+  showToast(`${name} hinzugefügt (${r(kcal)} kcal)`);
 });
 $("backBtn").addEventListener("click", () => { setStatus(""); showStep("capture"); });
 $("sheet").addEventListener("click", e => { if (e.target === $("sheet")) closeSheet(); });
@@ -1875,18 +1919,21 @@ function openEntry(id, keepFocus = false) {
   } else {
     const per = v => e.grams > 0 ? v / e.grams * 100 : 0;
     const d = density(e);
-    const row = (label, v, unit, round) => `<div><span>${label}</span><b>${round ? r(v) : fmtDensity(v)} ${unit}</b><em>${round ? r(per(v)) : fmtDensity(per(v))} ${unit}</em></div>`;
+    const row = (label, v, unit, round) => `<div><span>${label}</span><b>${round ? r(v) : fmtDensity(v)} ${unit}</b><em>${e.quick ? "" : (round ? r(per(v)) : fmtDensity(per(v))) + " " + unit}</em></div>`;
+    const qIn = (id, label, v, unit) => `<div class="entry-amount"><label for="${id}">${label}</label>
+          <input type="text" inputmode="decimal" id="${id}" value="${unit === "kcal" ? r(v) : fmtDensity(v)}"><span>${unit}</span></div>`;
     // Ansicht: Zeit · Menge · Mahlzeit; bearbeiten erst nach Tippen auf „Bearbeiten“
-    $("entryBody").innerHTML = `<p class="entry-sub">${when} · ${r(e.grams)} g · ${Object.fromEntries(MEALS)[mealOf(e)]}</p>
+    $("entryBody").innerHTML = `<p class="entry-sub">${when} · ${e.quick ? "Makros direkt" : r(e.grams) + " g"} · ${Object.fromEntries(MEALS)[mealOf(e)]}</p>
       <div class="kcal-big"><b>${r(e.kcal)}</b> kcal</div>
       ${macroLine(e)}
-      <div class="nutri"><div class="nutri-head"><span></span><b>Gegessen</b><em>pro 100 g</em></div>
+      <div class="nutri"><div class="nutri-head"><span></span><b>Gegessen</b><em>${e.quick ? "" : "pro 100 g"}</em></div>
         ${row("Kalorien", e.kcal, "kcal", true)}${row("Protein", e.protein, "g")}${row("Kohlenhydrate", e.carbs, "g")}${row("Fett", e.fat, "g")}
         <div class="nutri-dens"><span>Protein-Dichte</span><b class="dens ${densClass(d)}">${fmtDensity(d)} g pro 100 kcal</b></div>
       </div>
       <div class="entry-edit" id="entryEdit" hidden>
-        <div class="entry-amount"><label for="entryGrams">Menge</label>
-          <input type="text" inputmode="decimal" id="entryGrams" value="${r(e.grams)}"><span>g</span></div>
+        ${e.quick ? qIn("eqKcal", "Kalorien", e.kcal, "kcal") + qIn("eqProtein", "Protein", e.protein, "g") + qIn("eqCarbs", "Kohlenhydrate", e.carbs, "g") + qIn("eqFat", "Fett", e.fat, "g")
+          : `<div class="entry-amount"><label for="entryGrams">Menge</label>
+          <input type="text" inputmode="decimal" id="entryGrams" value="${r(e.grams)}"><span>g</span></div>`}
         <div class="segmented entry-meal" id="entryMeal" role="group" aria-label="Mahlzeit"></div>
         <div class="row"><button class="secondary" id="entryEditCancel">Abbrechen</button><button id="entryEditSave">Speichern</button></div>
       </div>`;
@@ -1898,11 +1945,17 @@ function openEntry(id, keepFocus = false) {
       pendingMeal = b.dataset.meal;
       renderMealPick($("entryMeal"), pendingMeal);
     };
-    $("entryGrams").onkeydown = ev => { if (ev.key === "Enter") { ev.preventDefault(); $("entryEditSave").click(); } };
+    for (const inp of $("entryEdit").querySelectorAll("input"))
+      inp.onkeydown = ev => { if (ev.key === "Enter") { ev.preventDefault(); $("entryEditSave").click(); } };
     $("entryEditCancel").onclick = () => openEntry(e.id, true);
     // Speichern: Menge ändern → alle Nährwerte proportional anpassen
     $("entryEditSave").onclick = () => {
-      const g = parseFloat($("entryGrams").value.replace(",", "."));
+      if (e.quick) {
+        const q = id => parseFloat($(id).value.replace(",", "."));
+        for (const [k, id] of [["kcal", "eqKcal"], ["protein", "eqProtein"], ["carbs", "eqCarbs"], ["fat", "eqFat"]])
+          if (q(id) >= 0) e[k] = q(id);
+      }
+      const g = e.quick ? 0 : parseFloat($("entryGrams").value.replace(",", "."));
       if (g > 0 && e.grams && g !== e.grams) {
         const f = g / e.grams;
         for (const k of ["kcal", "protein", "carbs", "fat"]) e[k] = (e[k] || 0) * f;
@@ -1915,7 +1968,7 @@ function openEntry(id, keepFocus = false) {
   const canEdit = day === todayStr() || backfill;
   $("entryEditBtn").hidden = !canEdit;
   $("entryDelete").hidden = !(day === todayStr() || backfill);
-  $("entryFav").hidden = e.kind === "sport";
+  $("entryFav").hidden = e.kind === "sport" || !!e.quick;
   updateEntryFav(e);
   $("entrySheet").hidden = false;
   document.body.classList.add("sheet-open");
@@ -1969,7 +2022,7 @@ function removeEntry(id) {
   openConfirm({
     title: `„${e.name}“ löschen?`,
     text: e.kind === "sport" ? `${r(e.minutes)} min · ${r(e.kcal)} kcal Sport werden entfernt.`
-                             : `${r(e.grams)} g · ${r(e.kcal)} kcal werden aus diesem Tag entfernt.`,
+                             : `${e.quick ? "" : r(e.grams) + " g · "}${r(e.kcal)} kcal werden aus diesem Tag entfernt.`,
     action: () => { entries = entries.filter(x => x.id !== id); save(); closeEntry(); render(); showToast(`„${e.name}“ gelöscht`); }
   });
 }
@@ -2229,7 +2282,7 @@ function render() {
                <div class="e-meta"><span class="tag">Sport</span>${r(e.minutes)} min · ${fmtTime(e.time)}</div></div>
              <div class="e-side"><div class="e-kcal sport">+${r(e.kcal)} kcal</div></div>`
           : `<div class="e-main"><div class="e-name">${esc(e.name)}</div>
-               <div class="e-meta">${mealFilter === "all" ? MEAL_SHORT[mealOf(e)] + " · " : ""}${r(e.grams)} g · ${fmtTime(e.time)}</div></div>
+               <div class="e-meta">${mealFilter === "all" ? MEAL_SHORT[mealOf(e)] + " · " : ""}${e.quick ? "Makros direkt" : r(e.grams) + " g"} · ${fmtTime(e.time)}</div></div>
              <div class="e-side"><div class="e-kcal">${r(e.kcal)} kcal</div>
                <div class="dens ${densClass(density(e))}" title="${fmtDensity(density(e))} g Protein pro 100 kcal">P ${fmtDensity(density(e))}</div></div>`}
         <span class="chev" aria-hidden="true"></span></div>`;
