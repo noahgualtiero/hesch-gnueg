@@ -289,10 +289,14 @@
   .meal-table .dens.good::before { background: var(--good); }
   .meal-table .dens.bad::before { background: var(--cell-over); }
   .meal-table .dens.good, .meal-table .dens.bad { color: inherit; font-weight: inherit; }
-  .entry-meal { margin: 14px 0 0; }
   .entry-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
   .entry-actions .favbtn { width: 30px; height: 30px; font-size: 17px; }
-  .entry-amount { display: flex; align-items: center; gap: 8px; margin: -6px 0 14px; }
+  .entry-edit { background: var(--soft); border-radius: 12px; padding: 12px; margin: 16px 0 0; }
+  .entry-edit .entry-meal { margin: 12px 0 0; background: var(--field); }
+  .entry-edit .row button { margin-top: 12px; }
+  .entry-edit-btn { margin-top: 16px; }
+  .entry-amount { display: flex; align-items: center; gap: 8px; margin: 0; }
+  .entry-amount input { background: var(--card); }
   .entry-amount label { margin: 0 4px 0 0; }
   .entry-amount input { width: 96px; text-align: right; padding: 8px 10px; }
   .entry-amount span { color: var(--muted); font-size: 16px; }
@@ -607,6 +611,7 @@
       <div class="entry-actions"><button class="favbtn" id="entryFav" aria-pressed="false" aria-label="Als Favorit speichern">☆</button>
       <button class="secondary navbtn" id="closeEntry" aria-label="Schliessen">×</button></div></div>
     <div id="entryBody"></div>
+    <button class="secondary entry-edit-btn" id="entryEditBtn">Bearbeiten</button>
     <button class="delete-link" id="entryDelete">Eintrag löschen</button>
   </div>
 </div>
@@ -1852,36 +1857,44 @@ function openEntry(id, keepFocus = false) {
     const per = v => e.grams > 0 ? v / e.grams * 100 : 0;
     const d = density(e);
     const row = (label, v, unit, round) => `<div><span>${label}</span><b>${round ? r(v) : fmtDensity(v)} ${unit}</b><em>${round ? r(per(v)) : fmtDensity(per(v))} ${unit}</em></div>`;
-    const canEdit = day === todayStr() || backfill;
-    $("entryBody").innerHTML = `<p class="entry-sub">${when}</p>
-      <div class="entry-amount"><label for="entryGrams">Menge</label>
-        <input type="text" inputmode="decimal" id="entryGrams" value="${r(e.grams)}" ${canEdit ? "" : "disabled"}><span>g</span></div>
+    // Ansicht: Zeit · Menge · Mahlzeit; bearbeiten erst nach Tippen auf „Bearbeiten“
+    $("entryBody").innerHTML = `<p class="entry-sub">${when} · ${r(e.grams)} g · ${Object.fromEntries(MEALS)[mealOf(e)]}</p>
       <div class="kcal-big"><b>${r(e.kcal)}</b> kcal</div>
       ${macroLine(e)}
       <div class="nutri"><div class="nutri-head"><span></span><b>Gegessen</b><em>pro 100 g</em></div>
         ${row("Kalorien", e.kcal, "kcal", true)}${row("Protein", e.protein, "g")}${row("Kohlenhydrate", e.carbs, "g")}${row("Fett", e.fat, "g")}
         <div class="nutri-dens"><span>Protein-Dichte</span><b class="dens ${densClass(d)}">${fmtDensity(d)} g pro 100 kcal</b></div>
       </div>
-      <div class="segmented entry-meal" id="entryMeal" role="group" aria-label="Mahlzeit"></div>`;
-    renderMealPick($("entryMeal"), mealOf(e));
-    // Menge ändern: alle Nährwerte proportional anpassen
-    $("entryGrams").onchange = () => {
-      const g = parseFloat($("entryGrams").value.replace(",", "."));
-      if (!(g > 0) || !e.grams) { $("entryGrams").value = r(e.grams); return; }
-      const f = g / e.grams;
-      for (const k of ["kcal", "protein", "carbs", "fat"]) e[k] = (e[k] || 0) * f;
-      e.grams = g;
-      save(); render(); openEntry(e.id, true);
-    };
-    $("entryGrams").onkeydown = ev => { if (ev.key === "Enter") { ev.preventDefault(); ev.target.blur(); } };
+      <div class="entry-edit" id="entryEdit" hidden>
+        <div class="entry-amount"><label for="entryGrams">Menge</label>
+          <input type="text" inputmode="decimal" id="entryGrams" value="${r(e.grams)}"><span>g</span></div>
+        <div class="segmented entry-meal" id="entryMeal" role="group" aria-label="Mahlzeit"></div>
+        <div class="row"><button class="secondary" id="entryEditCancel">Abbrechen</button><button id="entryEditSave">Speichern</button></div>
+      </div>`;
+    let pendingMeal = mealOf(e);
+    renderMealPick($("entryMeal"), pendingMeal);
     $("entryMeal").onclick = ev => {
       const b = ev.target.closest("button[data-meal]");
       if (!b) return;
-      e.meal = b.dataset.meal;
-      renderMealPick($("entryMeal"), e.meal);
-      save(); render();
+      pendingMeal = b.dataset.meal;
+      renderMealPick($("entryMeal"), pendingMeal);
+    };
+    $("entryGrams").onkeydown = ev => { if (ev.key === "Enter") { ev.preventDefault(); $("entryEditSave").click(); } };
+    $("entryEditCancel").onclick = () => openEntry(e.id, true);
+    // Speichern: Menge ändern → alle Nährwerte proportional anpassen
+    $("entryEditSave").onclick = () => {
+      const g = parseFloat($("entryGrams").value.replace(",", "."));
+      if (g > 0 && e.grams && g !== e.grams) {
+        const f = g / e.grams;
+        for (const k of ["kcal", "protein", "carbs", "fat"]) e[k] = (e[k] || 0) * f;
+        e.grams = g;
+      }
+      e.meal = pendingMeal;
+      save(); render(); openEntry(e.id, true);
     };
   }
+  const canEdit = day === todayStr() || backfill;
+  $("entryEditBtn").hidden = !canEdit || e.kind === "sport";
   $("entryDelete").hidden = !(day === todayStr() || backfill);
   $("entryFav").hidden = e.kind === "sport";
   updateEntryFav(e);
@@ -1899,6 +1912,12 @@ function updateEntryFav(e) {
   $("entryFav").textContent = on ? "★" : "☆";
   $("entryFav").setAttribute("aria-label", on ? "Aus Favoriten entfernen" : "Als Favorit speichern");
 }
+$("entryEditBtn").addEventListener("click", () => {
+  $("entryEdit").hidden = false;
+  $("entryEditBtn").hidden = true;
+  $("entryEdit").scrollIntoView({ block: "nearest" });
+  $("entryGrams").focus(); $("entryGrams").select();
+});
 $("entryFav").addEventListener("click", () => {
   const e = entries.find(x => x.id === entryOpenId);
   if (!e || e.kind === "sport" || !e.grams) return;
