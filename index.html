@@ -290,6 +290,12 @@
   .meal-table .dens.bad::before { background: var(--cell-over); }
   .meal-table .dens.good, .meal-table .dens.bad { color: inherit; font-weight: inherit; }
   .entry-meal { margin: 14px 0 0; }
+  .entry-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .entry-actions .favbtn { width: 30px; height: 30px; font-size: 17px; }
+  .entry-amount { display: flex; align-items: center; gap: 8px; margin: -6px 0 14px; }
+  .entry-amount label { margin: 0 4px 0 0; }
+  .entry-amount input { width: 96px; text-align: right; padding: 8px 10px; }
+  .entry-amount span { color: var(--muted); font-size: 16px; }
   .backfill { display: block; margin: 12px auto 0; font-size: 14px; color: var(--muted); }
   #toast { text-align: center; color: var(--good); font-weight: 500; font-size: 14px; min-height: 0; margin: 10px 0 0; }
   #toast:empty { display: none; }
@@ -597,7 +603,9 @@
 </div>
 <div class="sheet-backdrop" id="entrySheet" hidden>
   <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="entryTitle">
-    <div class="sheet-head"><h2 id="entryTitle"></h2><button class="secondary navbtn" id="closeEntry" aria-label="Schliessen">×</button></div>
+    <div class="sheet-head"><h2 id="entryTitle"></h2>
+      <div class="entry-actions"><button class="favbtn" id="entryFav" aria-pressed="false" aria-label="Als Favorit speichern">☆</button>
+      <button class="secondary navbtn" id="closeEntry" aria-label="Schliessen">×</button></div></div>
     <div id="entryBody"></div>
     <button class="delete-link" id="entryDelete">Eintrag löschen</button>
   </div>
@@ -1659,7 +1667,7 @@ $("addBtn").addEventListener("click", () => {
   if (grams <= 0) return;
   const f = grams / 100;
   entries.push({
-    id: Date.now(), time: new Date().toISOString(), meal: pickedMeal, name: current.name, grams,
+    id: Date.now(), time: new Date().toISOString(), meal: pickedMeal, key: current.key, img: current.img || "", name: current.name, grams,
     kcal: current.kcal * f, protein: current.protein * f, carbs: current.carbs * f, fat: current.fat * f
   });
   rememberUsed(current, parseFloat($("portion").value) || current.portion || 100);
@@ -1831,7 +1839,7 @@ function macroLine(v) {
 
 // Detailansicht eines Eintrags
 let entryOpenId = null;
-function openEntry(id) {
+function openEntry(id, keepFocus = false) {
   const e = entries.find(x => x.id === id);
   if (!e) return;
   entryOpenId = id;
@@ -1844,7 +1852,10 @@ function openEntry(id) {
     const per = v => e.grams > 0 ? v / e.grams * 100 : 0;
     const d = density(e);
     const row = (label, v, unit, round) => `<div><span>${label}</span><b>${round ? r(v) : fmtDensity(v)} ${unit}</b><em>${round ? r(per(v)) : fmtDensity(per(v))} ${unit}</em></div>`;
-    $("entryBody").innerHTML = `<p class="entry-sub">${when} · ${r(e.grams)} g</p>
+    const canEdit = day === todayStr() || backfill;
+    $("entryBody").innerHTML = `<p class="entry-sub">${when}</p>
+      <div class="entry-amount"><label for="entryGrams">Menge</label>
+        <input type="text" inputmode="decimal" id="entryGrams" value="${r(e.grams)}" ${canEdit ? "" : "disabled"}><span>g</span></div>
       <div class="kcal-big"><b>${r(e.kcal)}</b> kcal</div>
       ${macroLine(e)}
       <div class="nutri"><div class="nutri-head"><span></span><b>Gegessen</b><em>pro 100 g</em></div>
@@ -1853,6 +1864,16 @@ function openEntry(id) {
       </div>
       <div class="segmented entry-meal" id="entryMeal" role="group" aria-label="Mahlzeit"></div>`;
     renderMealPick($("entryMeal"), mealOf(e));
+    // Menge ändern: alle Nährwerte proportional anpassen
+    $("entryGrams").onchange = () => {
+      const g = parseFloat($("entryGrams").value.replace(",", "."));
+      if (!(g > 0) || !e.grams) { $("entryGrams").value = r(e.grams); return; }
+      const f = g / e.grams;
+      for (const k of ["kcal", "protein", "carbs", "fat"]) e[k] = (e[k] || 0) * f;
+      e.grams = g;
+      save(); render(); openEntry(e.id, true);
+    };
+    $("entryGrams").onkeydown = ev => { if (ev.key === "Enter") { ev.preventDefault(); ev.target.blur(); } };
     $("entryMeal").onclick = ev => {
       const b = ev.target.closest("button[data-meal]");
       if (!b) return;
@@ -1862,10 +1883,35 @@ function openEntry(id) {
     };
   }
   $("entryDelete").hidden = !(day === todayStr() || backfill);
+  $("entryFav").hidden = e.kind === "sport";
+  updateEntryFav(e);
   $("entrySheet").hidden = false;
   document.body.classList.add("sheet-open");
-  $("closeEntry").focus();
+  if (!keepFocus) $("closeEntry").focus();
 }
+// Favorit aus einem Eintrag: Werte pro 100 g, Portion = eingetragene Menge
+const entryKey = e => e.key || "entry:" + norm(e.name);
+function entryFavIndex(e) { const k = entryKey(e); return favs.findIndex(f => f.key === k || norm(f.name) === norm(e.name)); }
+function updateEntryFav(e) {
+  if (e.kind === "sport") return;
+  const on = entryFavIndex(e) >= 0;
+  $("entryFav").setAttribute("aria-pressed", on);
+  $("entryFav").textContent = on ? "★" : "☆";
+  $("entryFav").setAttribute("aria-label", on ? "Aus Favoriten entfernen" : "Als Favorit speichern");
+}
+$("entryFav").addEventListener("click", () => {
+  const e = entries.find(x => x.id === entryOpenId);
+  if (!e || e.kind === "sport" || !e.grams) return;
+  const i = entryFavIndex(e);
+  if (i >= 0) favs.splice(i, 1);
+  else {
+    const f = 100 / e.grams;
+    favs.push({ key: entryKey(e), name: e.name, img: e.img || "", kcal: e.kcal * f, protein: e.protein * f,
+                carbs: e.carbs * f, fat: e.fat * f, portion: Math.round(e.grams) });
+  }
+  writeList(FAV_KEY, favs);
+  updateEntryFav(e); renderFavs();
+});
 function closeEntry() {
   entryOpenId = null;
   $("entrySheet").hidden = true;
@@ -2068,6 +2114,12 @@ function render() {
       const dd = density(total);
       tip += (tip ? " " : "") + `Heute bisher <strong>${fmtDensity(dd)} g Protein pro 100 kcal</strong>`
         + (dd >= 10 ? " – sehr gut." : dd < 4 ? " – eher wenig." : ".");
+    }
+    // Nötige Protein-Dichte für den Rest des Tages, damit Protein- und Kalorienziel zusammen aufgehen
+    if (protLeft > 0 && kcalLeft > 0) {
+      const need = protLeft / kcalLeft * 100;
+      tip += ` Für dein Ziel brauchst du im Rest des Tages im Schnitt <strong>${fmtDensity(need)} g Protein pro 100 kcal</strong>`
+        + (need > 20 ? " – das schaffen nur sehr magere Proteinquellen." : ".");
     }
     $("goalView").innerHTML = `
       <div class="stats">
