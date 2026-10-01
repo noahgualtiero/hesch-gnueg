@@ -532,7 +532,7 @@
   </section>
 
   <section class="card">
-    <h2 id="mealsTitle">Heute gegessen</h2>
+    <h2 id="mealsTitle">Einträge</h2>
     <div class="segmented meal-filter" id="mealFilter" role="group" aria-label="Mahlzeit anzeigen"></div>
     <div id="meals"></div>
     <p class="dens-legend" id="densLegend"><span>P = g Protein pro 100 kcal</span> · <span><i class="good"></i>ab 10 sehr gut</span> · <span><i class="bad"></i>unter 4 wenig</span></p>
@@ -1983,7 +1983,7 @@ function render() {
   // Erfassen nur für heute: an vergangenen Tagen die Buttons ausblenden
   document.querySelector(".addrow").hidden = !editable;
   $("backfillBtn").hidden = editable;
-  $("mealsTitle").textContent = "Erfasste Lebensmittel";
+  $("mealsTitle").textContent = "Einträge";
 
   // Profil-Info
   $("profileInfo").textContent = tp
