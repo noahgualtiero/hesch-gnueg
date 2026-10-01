@@ -390,11 +390,12 @@
   .card-head[aria-expanded="true"] .toggle-label::after { transform: rotate(-135deg); vertical-align: -1px; }
   .week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
   .week-day { display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 0; }
+  .week-day .sport-bar { margin-bottom: -1px; }
   .week .cell { width: 100%; height: auto; aspect-ratio: 1; border-radius: 8px; }
   .week .cell.p-ok::after { inset: 32%; }
   .week-day span { font-size: 12px; color: var(--muted); }
   .week[hidden] { display: none; }
-  .sport-bar { width: 100%; height: 18px; display: flex; align-items: flex-end; justify-content: center; border-bottom: .5px solid var(--line); }
+  .sport-bar { width: 100%; height: 18px; display: flex; align-items: flex-end; justify-content: center; }
   .sport-bar i { display: block; width: 36%; min-height: 2px; border-radius: 2px 2px 0 0; background: var(--muted); }
   .sport-key { display: inline-block; width: 4px; height: 10px; border-radius: 1px; background: var(--muted); }
 
@@ -2195,9 +2196,9 @@ function renderWeekStrip() {
   for (const { d, i, sport } of days) {
     const label = i === 0 ? "Heute" : d.toLocaleDateString("de-CH", { weekday: "short" }).replace(".", "");
     const h = max > 0 && sport > 0 ? Math.max(12, sport / max * 100) : 0;
-    html += `<div class="week-day">${dayCell(d, dayStatus(dateStr(d)))}
+    html += `<div class="week-day">
       <div class="sport-bar" title="${sport ? r(sport) + " kcal Sport" : "kein Sport"}">${h ? `<i style="height:${h}%"></i>` : ""}</div>
-      <span>${label}</span></div>`;
+      ${dayCell(d, dayStatus(dateStr(d)))}<span>${label}</span></div>`;
   }
   $("weekStrip").innerHTML = html;
   $("sportLegend").hidden = !(max > 0) || gridOpen;
