@@ -296,6 +296,8 @@
   .entry-edit .row button { margin-top: 12px; }
   .entry-edit-btn { margin-top: 16px; }
   .entry-amount { display: flex; align-items: center; gap: 8px; margin: 0; }
+  .entry-amount + .entry-amount { margin-top: 10px; }
+  .entry-amount label { flex: 0 0 104px; }
   .entry-amount input { background: var(--card); }
   .entry-amount label { margin: 0 4px 0 0; }
   .entry-amount input { width: 96px; text-align: right; padding: 8px 10px; }
@@ -1852,7 +1854,24 @@ function openEntry(id, keepFocus = false) {
   const when = fmtTime(e.time);
   if (e.kind === "sport") {
     $("entryBody").innerHTML = `<p class="entry-sub">Sport · ${when} · ${r(e.minutes)} min</p>
-      <div class="kcal-big"><b>${r(e.kcal)}</b> kcal<small>verbraucht</small></div>`;
+      <div class="kcal-big"><b>${r(e.kcal)}</b> kcal<small>verbraucht</small></div>
+      <div class="entry-edit" id="entryEdit" hidden>
+        <div class="entry-amount"><label for="entryMinutes">Dauer</label>
+          <input type="text" inputmode="decimal" id="entryMinutes" value="${r(e.minutes)}"><span>min</span></div>
+        <div class="entry-amount"><label for="entryKcal">Verbrauch</label>
+          <input type="text" inputmode="decimal" id="entryKcal" value="${r(e.kcal)}"><span>kcal</span></div>
+        <div class="row"><button class="secondary" id="entryEditCancel">Abbrechen</button><button id="entryEditSave">Speichern</button></div>
+      </div>`;
+    const num = id => parseFloat($(id).value.replace(",", "."));
+    for (const id of ["entryMinutes", "entryKcal"])
+      $(id).onkeydown = ev => { if (ev.key === "Enter") { ev.preventDefault(); $("entryEditSave").click(); } };
+    $("entryEditCancel").onclick = () => openEntry(e.id, true);
+    $("entryEditSave").onclick = () => {
+      const m = num("entryMinutes"), k = num("entryKcal");
+      if (m >= 0) e.minutes = m;
+      if (k > 0) e.kcal = k;
+      save(); render(); openEntry(e.id, true);
+    };
   } else {
     const per = v => e.grams > 0 ? v / e.grams * 100 : 0;
     const d = density(e);
@@ -1894,7 +1913,7 @@ function openEntry(id, keepFocus = false) {
     };
   }
   const canEdit = day === todayStr() || backfill;
-  $("entryEditBtn").hidden = !canEdit || e.kind === "sport";
+  $("entryEditBtn").hidden = !canEdit;
   $("entryDelete").hidden = !(day === todayStr() || backfill);
   $("entryFav").hidden = e.kind === "sport";
   updateEntryFav(e);
@@ -1916,7 +1935,8 @@ $("entryEditBtn").addEventListener("click", () => {
   $("entryEdit").hidden = false;
   $("entryEditBtn").hidden = true;
   $("entryEdit").scrollIntoView({ block: "nearest" });
-  $("entryGrams").focus(); $("entryGrams").select();
+  const first = $("entryEdit").querySelector("input");
+  first.focus(); first.select();
 });
 $("entryFav").addEventListener("click", () => {
   const e = entries.find(x => x.id === entryOpenId);
