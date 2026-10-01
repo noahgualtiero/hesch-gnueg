@@ -36,7 +36,7 @@ und können gelöscht werden.
 
 ## 3. In der App eintragen
 
-1. In Gnueg **+ Nahrungsmittel** → **Rezept per Link oder Screenshot** antippen.
+1. In Gnueg **+ Essen** → **Rezept per Link oder Screenshot** antippen.
 2. Den eigenen OpenAI-Schlüssel eintragen und speichern.
    Das ist nur einmal nötig, die Angaben bleiben auf dem Gerät gespeichert.
 
