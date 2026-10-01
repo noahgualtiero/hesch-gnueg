@@ -267,8 +267,17 @@
   .meal-table .chev-cell { width: 22px; padding-left: 6px; }
   .meal-table .chev-cell .chev { display: inline-block; margin: 0 2px 1px 0; }
   .meal-table tbody tr.sel th, .meal-table tbody tr.sel td { background: var(--soft); }
-  .meal-table tbody tr.sel th { font-weight: 600; border-radius: 8px 0 0 8px; padding-left: 8px; }
+  .meal-table tbody tr.sel th { font-weight: 600; }
   .meal-table tbody tr.sel td:last-child { border-radius: 0 8px 8px 0; }
+  .list-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 12px; }
+  .list-head h2 { margin: 0; }
+  .sort-pick { position: relative; display: inline-flex; align-items: center; margin: 0; font-size: 14px; color: var(--muted);
+               text-transform: none; letter-spacing: 0; white-space: nowrap; cursor: pointer; }
+  .sort-pick::before { content: "Sortieren: "; margin-right: 3px; }
+  .sort-pick span { color: var(--text); }
+  .sort-pick::after { content: ""; width: 6px; height: 6px; margin-left: 6px; border-right: 2px solid var(--faint);
+                      border-bottom: 2px solid var(--faint); transform: rotate(45deg) translateY(-2px); }
+  .sort-pick select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; padding: 0; cursor: pointer; font-size: 16px; }
   .filter-chip { display: flex; justify-content: space-between; align-items: center; gap: 10px; background: var(--soft);
                  border-radius: 10px; padding: 8px 12px; margin: -2px 0 12px; font-size: 14px; font-weight: 600; }
   .filter-chip .linkbtn { margin: 0; font-size: 14px; }
@@ -542,7 +551,14 @@
   </section>
 
   <section class="card">
-    <h2 id="mealsTitle">Einträge</h2>
+    <div class="list-head">
+      <h2 id="mealsTitle">Einträge</h2>
+      <label class="sort-pick" id="sortWrap"><span id="sortLabel">Uhrzeit</span>
+        <select id="sortSelect" aria-label="Sortieren nach">
+          <option value="time">Uhrzeit</option><option value="kcal">Kalorien</option>
+          <option value="protein">Protein</option><option value="density">Protein-Dichte</option>
+        </select></label>
+    </div>
     <div class="filter-chip" id="filterChip" hidden><span id="filterLabel"></span><button class="linkbtn" id="filterReset">Alle anzeigen</button></div>
     <div id="meals"></div>
     <p class="dens-legend" id="densLegend"><span>P = g Protein pro 100 kcal</span> · <span><i class="good"></i>ab 10 sehr gut</span> · <span><i class="bad"></i>unter 4 wenig</span></p>
@@ -1980,6 +1996,16 @@ $("mealTable").addEventListener("keydown", e => {
   if (row && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); pickMealRow(row.dataset.f); }
 });
 $("filterReset").addEventListener("click", () => { mealFilter = "all"; render(); });
+// Sortierung der Einträge
+let sortMode = "time";
+try { sortMode = localStorage.getItem("naehrwert-sortierung") || "time"; } catch {}
+if (!["time", "kcal", "protein", "density"].includes(sortMode)) sortMode = "time";
+$("sortSelect").value = sortMode;
+$("sortSelect").addEventListener("change", () => {
+  sortMode = $("sortSelect").value;
+  try { localStorage.setItem("naehrwert-sortierung", sortMode); } catch {}
+  render();
+});
 
 function render() {
   const total = sum(entries);
@@ -2065,7 +2091,14 @@ function render() {
 
   const byTime = (x, y) => (x.time || "").localeCompare(y.time || "");
   const food = e => e.kind !== "sport";
-  const list = [...entries].sort(byTime);
+  const sortVal = { kcal: e => e.kcal, protein: e => e.protein || 0, density: e => density(e) }[sortMode];
+  const list = [...entries].sort((x, y) => {
+    if (!sortVal) return byTime(x, y);
+    if (food(x) !== food(y)) return food(x) ? -1 : 1; // Sport ans Ende
+    return sortVal(y) - sortVal(x) || byTime(x, y);
+  });
+  $("sortLabel").textContent = $("sortSelect").selectedOptions[0].textContent;
+  $("sortWrap").hidden = !entries.length;
   const foods = list.filter(food);
   $("densLegend").hidden = !foods.length;
   // Filter: Alle, alle Mahlzeiten und Sport
