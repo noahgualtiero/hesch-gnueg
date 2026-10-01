@@ -198,6 +198,8 @@
   .custom-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-top: .5px solid var(--line); font-size: 16px; }
   .custom-row:first-child { border-top: 0; }
   .custom-row span { flex: 1; min-width: 0; }
+  .custom-pick { cursor: pointer; }
+  .custom-row.editing .custom-pick { font-weight: 600; }
   .custom-row small { display: block; color: var(--muted); font-size: 14px; margin-top: 2px; }
   .custom-row button { width: 30px; height: 30px; margin: 0; padding: 0; border-radius: 50%; background: none; color: var(--danger); font-size: 20px; }
 
@@ -700,11 +702,10 @@
             <input type="file" id="portionPhoto" accept="image/*">
           </label>
           <button class="choice-opt" id="manualCreateBtn">Manuell erstellen
-            <small>Lebensmittel oder Rezept</small></button>
+            <small>Makros oder Rezept</small></button>
         </div>
       </div>
       <button class="linkbtn newfood" id="newFoodBtn" hidden>Eigenes Lebensmittel oder Rezept erstellen</button>
-      <button class="linkbtn newfood quick-link" id="quickBtn">Makros direkt eingeben</button>
       <div id="status" class="status"></div>
       <div id="reader"></div>
     </div>
@@ -772,6 +773,10 @@
       </div>
     </div>
   <div id="quickStep" hidden>
+      <div class="segmented create-mode" id="quickMode" role="group" aria-label="Art">
+        <button data-mode="macros" aria-pressed="true">Makros</button>
+        <button data-mode="recipe" aria-pressed="false">Rezept</button>
+      </div>
       <label for="qName">Bezeichnung (optional)</label>
       <input type="text" id="qName" maxlength="60" placeholder="z. B. Mittagessen Kantine">
       <div class="q-macros">
@@ -788,7 +793,7 @@
   <div id="createStep" hidden>
       <button class="linkbtn" id="createBack" hidden>‹ Zurück</button>
       <div class="segmented create-mode" id="createMode" role="group" aria-label="Art">
-        <button data-mode="food" aria-pressed="true">Lebensmittel</button>
+        <button data-mode="macros" aria-pressed="false">Makros</button>
         <button data-mode="recipe" aria-pressed="false">Rezept</button>
       </div>
       <label for="cName">Name</label>
@@ -832,7 +837,7 @@
       <div id="createStatus" class="status"></div>
       <button id="createSave">Speichern und weiter</button>
       <div id="customListWrap" hidden>
-        <label>Meine Lebensmittel</label>
+        <label>Meine Rezepte</label>
         <div id="customList"></div>
       </div>
     </div>
@@ -1181,7 +1186,7 @@ function renderFoodList() {
   }
   if (raw.length >= 2) {
     html += `<div class="combo-item combo-online" role="option" id="opt${comboItems.length}" data-i="${comboItems.length}">„${esc(raw)}“ selbst eingeben</div>`;
-    comboItems.push({ label: raw, pick: () => { $("newFoodBtn").click(); $("cName").value = raw; $("cKcal").focus(); } });
+    comboItems.push({ label: raw, pick: () => openQuick(raw) });
   }
   $("newFoodBtn").hidden = raw.length >= 2;
   $("foodList").innerHTML = html || `<div class="combo-empty">${raw ? "Nichts gefunden." : "Noch keine Favoriten. Tippe, um zu suchen."}</div>`;
@@ -1457,15 +1462,39 @@ $("favBtn").addEventListener("click", () => {
 renderFavs();
 
 // Eigenes Lebensmittel erstellen und verwalten
+// Eigene Rezepte unter dem Rezept-Baukasten: antippen lädt das Rezept zum Bearbeiten
+let editingRecipeId = null;
 function renderCustomList() {
-  $("customListWrap").hidden = !customs.length;
-  $("customList").innerHTML = customs.map(c => `<div class="custom-row"><span>${esc(c.name)}${c.ingredients ? '<span class="tag">Rezept</span>' : ""}
-      <small>pro 100 g: ${r(c.kcal)} kcal · P ${r(c.protein)} · K ${r(c.carbs)} · F ${r(c.fat)} · Portion ${r(c.portion)} g</small></span>
+  const recipes = customs.filter(c => c.ingredients && c.ingredients.length);
+  $("customListWrap").hidden = createMode !== "recipe" || !recipes.length;
+  $("customList").innerHTML = recipes.map(c => `<div class="custom-row${c.id === editingRecipeId ? " editing" : ""}">
+      <span class="custom-pick" role="button" tabindex="0" data-load="${c.id}">${esc(c.name)}
+      <small>${c.servings || 1} ${(c.servings || 1) == 1 ? "Portion" : "Portionen"} à ${r(c.portion)} g · ${r(c.kcal * c.portion / 100)} kcal pro Portion</small></span>
       <button data-id="${c.id}" aria-label="${esc(c.name)} löschen">×</button></div>`).join("");
 }
+function loadRecipe(id) {
+  const c = customs.find(x => x.id === id);
+  if (!c) return;
+  editingRecipeId = id;
+  $("cName").value = c.name;
+  $("cServings").value = c.servings || 1;
+  ingredients = c.ingredients.map(i => ({ ...i }));
+  renderIngredients(); renderCustomList();
+  $("createStatus").textContent = `„${c.name}“ geladen. Anpassen und speichern.`;
+  $("createSave").textContent = "Änderungen speichern";
+  $("sheetTitle").textContent = "Rezept bearbeiten";
+  document.querySelector("#sheet .sheet").scrollTop = 0;
+}
+$("customList").addEventListener("keydown", e => {
+  const s = e.target.closest("[data-load]");
+  if (s && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); loadRecipe(s.dataset.load); }
+});
 $("customList").addEventListener("click", e => {
+  const s = e.target.closest("[data-load]");
+  if (s) return loadRecipe(s.dataset.load);
   const b = e.target.closest("button[data-id]");
   if (!b) return;
+  if (b.dataset.id === editingRecipeId) { editingRecipeId = null; $("createSave").textContent = "Speichern und weiter"; }
   customs = customs.filter(c => c.id !== b.dataset.id);
   favs = favs.filter(f => f.key !== "custom:" + b.dataset.id);
   writeList(CUSTOM_KEY, customs); writeList(FAV_KEY, favs);
@@ -1483,12 +1512,16 @@ function setCreateMode(mode, imported = false) {
   $("createMode").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b.dataset.mode === mode));
   $("cFoodFields").hidden = mode !== "food";
   $("cRecipeFields").hidden = mode !== "recipe";
+  renderCustomList();
   ingPhotoStatus("");
   $("cName").placeholder = mode === "recipe" ? "z. B. Poulet-Curry mit Reis" : "z. B. Mein Proteinshake";
   $("createStatus").textContent = "";
   showStep("create");
 }
-$("createMode").addEventListener("click", e => { const b = e.target.closest("button[data-mode]"); if (b) setCreateMode(b.dataset.mode); });
+// Manuell erstellen: Makros (Schnelleintrag) oder Rezept
+function switchCreate(mode) { if (mode === "macros") openQuick(); else openCreate("recipe"); }
+$("createMode").addEventListener("click", e => { const b = e.target.closest("button[data-mode]"); if (b && b.dataset.mode !== createMode) switchCreate(b.dataset.mode); });
+$("quickMode").addEventListener("click", e => { const b = e.target.closest("button[data-mode]"); if (b && b.dataset.mode === "recipe") switchCreate("recipe"); });
 function recipeTotals() {
   const t = { grams: 0, kcal: 0, protein: 0, carbs: 0, fat: 0 };
   for (const i of ingredients) {
@@ -1552,7 +1585,7 @@ $("portionPhoto").addEventListener("change", e => {
   setCreateMode("recipe");
   recognizeIngredients(file);
 });
-$("manualCreateBtn").addEventListener("click", () => $("newFoodBtn").click());
+$("manualCreateBtn").addEventListener("click", () => openQuick());
 async function recognizeIngredients(file) {
   const cfg = recipeCfg();
   if (!cfg.key) {
@@ -1642,14 +1675,15 @@ $("ingList").addEventListener("click", e => {
   const inputs = $("ingRows").querySelectorAll("input");
   inputs[inputs.length - 1].select();
 });
-$("newFoodBtn").addEventListener("click", () => {
+function openCreate(mode) {
   for (const id of ["cName", "cKcal", "cProtein", "cCarbs", "cFat", "ingSearch"]) $(id).value = "";
   $("cBasis").value = "100"; $("cPortion").value = 100; $("cServings").value = 1;
   ingredients = []; renderIngredients(); $("ingList").hidden = true;
-  renderCustomList();
-  setCreateMode("food");
+  editingRecipeId = null; $("createSave").textContent = "Speichern und weiter";
+  setCreateMode(mode);
   $("cName").focus();
-});
+}
+$("newFoodBtn").addEventListener("click", () => openCreate("food"));
 $("createBack").addEventListener("click", () => {
   if (!recipeFrom) return showStep("capture");
   recipeFrom = null;
@@ -1663,15 +1697,22 @@ $("createSave").addEventListener("click", () => {
     if (!name) { $("createStatus").textContent = "Bitte einen Namen eingeben."; return; }
     if (!ingredients.length || !t.grams) { $("createStatus").textContent = "Bitte mindestens eine Zutat mit Menge hinzufügen."; return; }
     const f = 100 / t.grams, portion = Math.round(t.grams / n);
-    const c = { id: String(Date.now()), name, portion, servings: n,
+    const c = { id: editingRecipeId || String(Date.now()), name, portion, servings: n,
                 kcal: t.kcal * f, protein: t.protein * f, carbs: t.carbs * f, fat: t.fat * f,
                 ingredients: ingredients.map(i => ({ ...i })) };
-    customs.push(c);
+    const at = customs.findIndex(x => x.id === c.id);
+    if (at >= 0) {
+      customs[at] = c;
+      // Favorit desselben Rezepts mit den neuen Werten aktualisieren
+      favs = favs.map(fv => fv.key === "custom:" + c.id ? { ...fv, name, kcal: c.kcal, protein: c.protein, carbs: c.carbs, fat: c.fat, portion } : fv);
+      writeList(FAV_KEY, favs);
+    } else customs.push(c);
+    editingRecipeId = null; $("createSave").textContent = "Speichern und weiter";
     writeList(CUSTOM_KEY, customs);
     buildSelect();
     recipeFrom = null;
     showProduct(customProduct(c), portion);
-    setStatus(`Rezept „${name}“ gespeichert. 1 Portion = ${portion} g.`);
+    setStatus(`Rezept „${name}“ ${at >= 0 ? "aktualisiert" : "gespeichert"}. 1 Portion = ${portion} g.`);
     return;
   }
   const portion = parseFloat($("cPortion").value) || 100;
@@ -1809,13 +1850,15 @@ $("headBack").addEventListener("click", () => {
 });
 // Makros direkt eingeben: Eintrag ohne Lebensmittel und ohne Gewicht
 let quickMeal = "snack";
-$("quickBtn").addEventListener("click", () => {
+function openQuick(name = "") {
+  createMode = "macros";
   for (const id of ["qName", "qProtein", "qCarbs", "qFat"]) $(id).value = "";
+  $("qName").value = name;
   $("qStatus").textContent = ""; updateQuickKcal();
   quickMeal = mealForTime(new Date()); renderMealPick($("qMeal"), quickMeal);
   showStep("quick");
   $("qProtein").focus();
-});
+}
 // Kalorien immer aus den Makros: 4 kcal pro g Protein und Kohlenhydrate, 9 kcal pro g Fett
 const macroKcal = (p, c, f) => p * 4 + c * 4 + f * 9;
 const qVal = id => Math.max(0, parseFloat(String($(id).value).replace(",", ".")) || 0);
