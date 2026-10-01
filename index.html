@@ -255,12 +255,13 @@
   .addbtn { font-size: 16px; font-weight: 600; padding: 14px 10px; border-radius: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .addbtn.sport { flex: 0 0 34%; background: var(--soft); color: var(--text); }
   .meal-pick { margin: 0; }
-  .meal-filter button { font-size: 12px; padding: 6px 2px; }
-  .meal-table { width: 100%; border-collapse: collapse; margin: -6px 0 14px; font-size: 14px; font-variant-numeric: tabular-nums; }
+  .segmented.meal-filter button { font-size: 12px; padding: 6px 1px; }
+  .meal-table { width: 100%; border-collapse: collapse; margin: 0; font-size: 14px; font-variant-numeric: tabular-nums; }
   .meal-table th, .meal-table td { padding: 7px 0; text-align: right; font-weight: 400; border-bottom: .5px solid var(--line); }
   .meal-table th:first-child { text-align: left; }
   .meal-table thead th { font-size: 12px; color: var(--muted); padding-top: 0; }
-  .meal-table tr.total th, .meal-table tr.total td { font-weight: 600; border-bottom: 0; }
+  .meal-table tbody tr:last-child th, .meal-table tbody tr:last-child td { border-bottom: 0; }
+  .meal-table .none { color: var(--faint); }
   .meal-table .dens::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%;
                               background: var(--faint); margin-right: 5px; vertical-align: 1px; }
   .meal-table .dens.good::before { background: var(--good); }
@@ -525,10 +526,14 @@
     <div id="toast" class="status" role="status"></div>
   </section>
 
+  <section class="card" id="mealCard" hidden>
+    <h2>Mahlzeiten</h2>
+    <div id="mealTable"></div>
+  </section>
+
   <section class="card">
     <h2 id="mealsTitle">Heute gegessen</h2>
     <div class="segmented meal-filter" id="mealFilter" role="group" aria-label="Mahlzeit anzeigen"></div>
-    <div id="mealTable"></div>
     <div id="meals"></div>
     <p class="dens-legend" id="densLegend"><span>P = g Protein pro 100 kcal</span> · <span><i class="good"></i>ab 10 sehr gut</span> · <span><i class="bad"></i>unter 4 wenig</span></p>
   </section>
@@ -2041,25 +2046,25 @@ function render() {
   const list = [...entries].sort(byTime);
   const foods = list.filter(food);
   $("densLegend").hidden = !foods.length;
-  // Filter: Alle + nur Mahlzeiten mit Einträgen
-  const present = MEALS.filter(([k]) => foods.some(e => mealOf(e) === k));
-  if (mealFilter !== "all" && !present.some(([k]) => k === mealFilter)) mealFilter = "all";
-  $("mealFilter").hidden = present.length < 2;
-  $("mealFilter").innerHTML = [["all", "Alle"], ...present.map(([k]) => [k, MEAL_SHORT[k]])]
-    .map(([k, l]) => `<button data-f="${k}" aria-pressed="${k === mealFilter}">${l}</button>`).join("");
-  // Summentabelle: pro Mahlzeit und Total (bei einer Mahlzeit nur deren Zeile)
-  const sumRow = (label, items, cls = "") => {
-    const s = sum(items), d = density(s);
-    return `<tr class="${cls}"><th>${label}</th><td>${r(s.kcal)}</td><td>${r(s.protein)} g</td>
-      <td><span class="dens ${densClass(d)}">${fmtDensity(d)}</span></td></tr>`;
-  };
+  // Filter: Alle, alle Mahlzeiten und Sport
+  const FILTERS = [["all", "Alle"], ...MEALS.map(([k]) => [k, MEAL_SHORT[k]]), ["sport", "Sport"]];
+  $("mealFilter").hidden = !list.length;
+  $("mealFilter").innerHTML = FILTERS.map(([k, l]) => `<button data-f="${k}" aria-pressed="${k === mealFilter}">${l}</button>`).join("");
+  // Eigene Tabelle: pro Mahlzeit kcal, Protein, Protein-Dichte; Sport mit Verbrauch
+  const dash = '<span class="none">–</span>';
   let rows = "";
-  if (mealFilter === "all") {
-    for (const [k, label] of present) rows += sumRow(label, foods.filter(e => mealOf(e) === k));
-    if (present.length > 1) rows += sumRow("Total", foods, "total");
-  } else rows = sumRow(MEALS.find(([k]) => k === mealFilter)[1], foods.filter(e => mealOf(e) === mealFilter));
-  $("mealTable").innerHTML = foods.length ? `<table class="meal-table">
-      <thead><tr><th></th><th>kcal</th><th>Protein</th><th>P/100 kcal</th></tr></thead><tbody>${rows}</tbody></table>` : "";
+  for (const [k, label] of MEALS) {
+    const items = foods.filter(e => mealOf(e) === k);
+    const s = sum(items), d = density(s);
+    rows += items.length
+      ? `<tr><th>${label}</th><td>${r(s.kcal)}</td><td>${r(s.protein)} g</td><td><span class="dens ${densClass(d)}">${fmtDensity(d)}</span></td></tr>`
+      : `<tr><th>${label}</th><td>${dash}</td><td>${dash}</td><td>${dash}</td></tr>`;
+  }
+  const sp = list.filter(e => !food(e)).reduce((a, e) => a + e.kcal, 0);
+  rows += `<tr><th>Sport</th><td>${sp ? "+" + r(sp) : dash}</td><td>${dash}</td><td>${dash}</td></tr>`;
+  $("mealCard").hidden = !list.length;
+  $("mealTable").innerHTML = `<table class="meal-table">
+      <thead><tr><th></th><th>kcal</th><th>Protein</th><th>P/100 kcal</th></tr></thead><tbody>${rows}</tbody></table>`;
   const entryHtml = e => `<div class="entry" role="button" tabindex="0" data-id="${e.id}">${e.kind === "sport"
           ? `<div class="e-main"><div class="e-name">${esc(e.name)}</div>
                <div class="e-meta"><span class="tag">Sport</span>${r(e.minutes)} min · ${fmtTime(e.time)}</div></div>
@@ -2069,8 +2074,9 @@ function render() {
              <div class="e-side"><div class="e-kcal">${r(e.kcal)} kcal</div>
                <div class="dens ${densClass(density(e))}" title="${fmtDensity(density(e))} g Protein pro 100 kcal">P ${fmtDensity(density(e))}</div></div>`}
         <span class="chev" aria-hidden="true"></span></div>`;
-  const shown = mealFilter === "all" ? list : foods.filter(e => mealOf(e) === mealFilter);
-  $("meals").innerHTML = shown.length ? shown.map(entryHtml).join("") : '<p class="empty">Noch nichts erfasst.</p>';
+  const shown = mealFilter === "all" ? list : mealFilter === "sport" ? list.filter(e => !food(e)) : foods.filter(e => mealOf(e) === mealFilter);
+  $("meals").innerHTML = shown.length ? shown.map(entryHtml).join("")
+    : `<p class="empty">${list.length ? "Hier ist nichts erfasst." : "Noch nichts erfasst."}</p>`;
   renderHeatmap();
 }
 
